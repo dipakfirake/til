@@ -85,6 +85,21 @@ def update_readme(used_count, total):
         f.write(content)
 
 def main():
+    ist = timezone(timedelta(hours=5, minutes=30))
+    today_str = datetime.now(ist).strftime("%Y-%m-%d")
+    
+    # Strictly enforce 1 file per day
+    readme_path = os.path.join(os.getcwd(), "README.md")
+    if os.path.exists(readme_path):
+        with open(readme_path, "r", encoding="utf-8") as f:
+            if f"Last updated: {today_str}" in f.read():
+                print(f"Already generated a topic today ({today_str}). Exiting to maintain 1-per-day streak.")
+                gh = os.environ.get("GITHUB_OUTPUT", "")
+                if gh:
+                    with open(gh, "a") as f:
+                        f.write("has_new=false\n")
+                return
+
     topic, used = pick_topic()
     total = len(TOPICS)
     used_count = len(used)
