@@ -1,1077 +1,146 @@
-import json
 import random
 import os
 import hashlib
 from datetime import datetime, timezone, timedelta
 
 TOPICS = [
-    {
-        "category": "java",
-        "title": "HashMap vs ConcurrentHashMap",
-        "content": """## HashMap vs ConcurrentHashMap in Java
-
-`HashMap` is not thread-safe — if multiple threads modify it simultaneously, it can lead to data corruption or infinite loops.
-
-`ConcurrentHashMap` solves this by using segment-level locking (Java 7) or CAS operations with synchronized blocks (Java 8+).
-
-```java
-// Not thread-safe
-Map<String, Integer> map = new HashMap<>();
-
-// Thread-safe alternative
-Map<String, Integer> concurrentMap = new ConcurrentHashMap<>();
-concurrentMap.put("key", 1);
-concurrentMap.computeIfAbsent("key2", k -> 2);
-```
-
-### Key Differences
-| Feature | HashMap | ConcurrentHashMap |
-|:---|:---|:---|
-| Thread Safety | No | Yes |
-| Null Keys | Allowed (1) | Not Allowed |
-| Performance (single thread) | Faster | Slightly slower |
-| Locking | None | Segment/Bucket level |
-
-### When to Use
-- Use `HashMap` for single-threaded scenarios
-- Use `ConcurrentHashMap` in multithreaded applications where you need concurrent reads/writes"""
-    },
-    {
-        "category": "java",
-        "title": "Java Stream API - reduce() vs collect()",
-        "content": """## Java Stream API: reduce() vs collect()
-
-Both are terminal operations in Java Streams, but serve different purposes.
-
-### reduce() — Combines elements into a single value
-```java
-List<Integer> numbers = List.of(1, 2, 3, 4, 5);
-
-// Sum using reduce
-int sum = numbers.stream()
-    .reduce(0, Integer::sum);
-// Result: 15
-
-// Find max
-Optional<Integer> max = numbers.stream()
-    .reduce(Integer::max);
-```
-
-### collect() — Gathers elements into a collection
-```java
-List<String> names = List.of("Alice", "Bob", "Charlie", "Alice");
-
-// Collect to Set (removes duplicates)
-Set<String> uniqueNames = names.stream()
-    .collect(Collectors.toSet());
-
-// Group by first letter
-Map<Character, List<String>> grouped = names.stream()
-    .collect(Collectors.groupingBy(s -> s.charAt(0)));
-```
-
-### Rule of Thumb
-- Use `reduce()` when you need a **single value** (sum, max, concatenation)
-- Use `collect()` when you need a **collection** (List, Set, Map)"""
-    },
-    {
-        "category": "spring-boot",
-        "title": "Spring Boot @Transactional Propagation Types",
-        "content": """## Understanding @Transactional Propagation in Spring Boot
-
-The `propagation` attribute defines how transactions relate to each other.
-
-```java
-@Service
-public class OrderService {
-
-    @Transactional(propagation = Propagation.REQUIRED) // Default
-    public void createOrder(Order order) {
-        // Joins existing transaction or creates new one
-        orderRepository.save(order);
-        paymentService.processPayment(order);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void sendNotification(Order order) {
-        // Always creates a NEW transaction
-        // Even if called within an existing transaction
-        notificationRepository.save(new Notification(order));
-    }
-}
-```
-
-### Common Propagation Types
-| Type | Behavior |
-|:---|:---|
-| `REQUIRED` (default) | Join existing txn, or create new |
-| `REQUIRES_NEW` | Always create new txn, suspend existing |
-| `MANDATORY` | Must run within existing txn, else exception |
-| `NEVER` | Must NOT run within a txn, else exception |
-| `SUPPORTS` | Use txn if exists, else run without |
-
-### Gotcha
-`@Transactional` only works when called from **outside** the class. Internal method calls bypass the proxy!"""
-    },
-    {
-        "category": "spring-boot",
-        "title": "Spring Boot Custom Exception Handling with @ControllerAdvice",
-        "content": """## Global Exception Handling in Spring Boot
-
-Instead of handling exceptions in every controller, use `@ControllerAdvice` for centralized error handling.
-
-```java
-@RestControllerAdvice
-public class GlobalExceptionHandler {
-
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.NOT_FOUND.value(),
-            ex.getMessage(),
-            LocalDateTime.now()
-        );
-        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
-    }
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult()
-            .getFieldErrors()
-            .stream()
-            .map(e -> e.getField() + ": " + e.getDefaultMessage())
-            .collect(Collectors.joining(", "));
-
-        ErrorResponse error = new ErrorResponse(404, message, LocalDateTime.now());
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
-    }
-}
-```
-
-This ensures all APIs return consistent error responses — critical for production applications."""
-    },
-    {
-        "category": "react",
-        "title": "React useCallback vs useMemo",
-        "content": """## useCallback vs useMemo in React
-
-Both are optimization hooks, but they memoize different things.
-
-### useCallback — Memoizes a **function**
-```jsx
-const handleClick = useCallback(() => {
-  console.log('Button clicked:', count);
-}, [count]); // Re-creates only when count changes
-```
-
-### useMemo — Memoizes a **computed value**
-```jsx
-const expensiveResult = useMemo(() => {
-  return items.filter(item => item.price > 100)
-              .sort((a, b) => b.price - a.price);
-}, [items]); // Re-computes only when items change
-```
-
-### When to Use
-- `useCallback` → When passing callbacks to child components that use `React.memo()`
-- `useMemo` → When you have expensive calculations that shouldn't run on every render
-
-### Don't Overuse!
-Premature optimization adds complexity. Only use when you **measure** a performance issue."""
-    },
-    {
-        "category": "react",
-        "title": "Custom Hooks - Extracting Reusable Logic",
-        "content": """## Creating Custom Hooks in React
-
-Custom hooks let you extract component logic into reusable functions.
-
-```jsx
-// useLocalStorage.js — Persist state in localStorage
-function useLocalStorage(key, initialValue) {
-  const [storedValue, setStoredValue] = useState(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      return initialValue;
-    }
-  });
-
-  const setValue = (value) => {
-    setStoredValue(value);
-    window.localStorage.setItem(key, JSON.stringify(value));
-  };
-
-  return [storedValue, setValue];
-}
-
-// Usage in any component
-function App() {
-  const [theme, setTheme] = useLocalStorage('theme', 'dark');
-  return <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-    Current: {theme}
-  </button>;
-}
-```
-
-### Rules of Custom Hooks
-1. Name must start with `use`
-2. Can call other hooks inside
-3. Each call gets its own isolated state"""
-    },
-    {
-        "category": "javascript",
-        "title": "Promise.all vs Promise.allSettled vs Promise.race",
-        "content": """## Promise Combinators in JavaScript
-
-### Promise.all — Fails fast
-```javascript
-// All must succeed, or it rejects with the first failure
-const results = await Promise.all([
-  fetch('/api/users'),
-  fetch('/api/posts'),
-  fetch('/api/comments')
-]);
-// If any one fails, entire Promise.all rejects
-```
-
-### Promise.allSettled — Never fails
-```javascript
-// Waits for ALL to complete, reports each result
-const results = await Promise.allSettled([
-  fetch('/api/users'),
-  fetch('/api/might-fail'),
-]);
-// results: [{status: 'fulfilled', value: ...}, {status: 'rejected', reason: ...}]
-```
-
-### Promise.race — First one wins
-```javascript
-// Returns result of whichever finishes first
-const fastest = await Promise.race([
-  fetch('/api/server1'),
-  fetch('/api/server2'),
-  new Promise((_, reject) => setTimeout(() => reject('Timeout'), 5000))
-]);
-```
-
-### When to Use
-| Combinator | Use Case |
-|:---|:---|
-| `Promise.all` | All results needed, fail if any fails |
-| `Promise.allSettled` | Need all results regardless of failures |
-| `Promise.race` | Timeout patterns, fastest response wins |"""
-    },
-    {
-        "category": "javascript",
-        "title": "Debounce vs Throttle - Performance Optimization",
-        "content": """## Debounce vs Throttle in JavaScript
-
-Both limit how often a function executes, but differently.
-
-### Debounce — Waits for silence
-```javascript
-function debounce(fn, delay) {
-  let timer;
-  return function (...args) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), delay);
-  };
-}
-
-// Usage: Search input — only fires after user stops typing
-const searchInput = document.getElementById('search');
-searchInput.addEventListener('input', debounce((e) => {
-  fetchResults(e.target.value);
-}, 300));
-```
-
-### Throttle — Fires at regular intervals
-```javascript
-function throttle(fn, limit) {
-  let inThrottle = false;
-  return function (...args) {
-    if (!inThrottle) {
-      fn.apply(this, args);
-      inThrottle = true;
-      setTimeout(() => (inThrottle = false), limit);
-    }
-  };
-}
-
-// Usage: Scroll handler — fires at most once every 200ms
-window.addEventListener('scroll', throttle(() => {
-  updateScrollPosition();
-}, 200));
-```
-
-### Quick Reference
-| | Debounce | Throttle |
-|:---|:---|:---|
-| Fires | After inactivity period | At regular intervals |
-| Best for | Search input, resize | Scroll, mousemove |"""
-    },
-    {
-        "category": "system-design",
-        "title": "CAP Theorem Explained Simply",
-        "content": """## CAP Theorem — The Trade-off Triangle
-
-In a distributed system, you can only guarantee **2 out of 3**:
-
-- **C**onsistency — Every read receives the most recent write
-- **A**vailability — Every request receives a response
-- **P**artition Tolerance — System works despite network failures
-
-### Real-World Examples
-
-| Database | Type | Trade-off |
-|:---|:---|:---|
-| MySQL, PostgreSQL | CP | Consistent, but may become unavailable during partition |
-| Cassandra, DynamoDB | AP | Always available, but may serve stale data |
-| MongoDB | CP (default) | Configurable, defaults to consistency |
-
-### Why Not All Three?
-When a network partition happens (and it **will** in distributed systems), you must choose:
-- **CP**: Reject requests until partition heals (sacrifice availability)
-- **AP**: Serve possibly stale data (sacrifice consistency)
-
-### Practical Takeaway
-- **Banking/Payments** → Choose CP (consistency matters)
-- **Social Media Feed** → Choose AP (availability matters, slight staleness is OK)"""
-    },
-    {
-        "category": "system-design",
-        "title": "Database Indexing - How It Actually Works",
-        "content": """## Database Indexing Internals
-
-An index is like a book's table of contents — it helps the database find data without scanning every row.
-
-### B-Tree Index (Most Common)
-```sql
--- Without index: Full table scan — O(n)
-SELECT * FROM users WHERE email = 'john@example.com';
-
--- Create index
-CREATE INDEX idx_email ON users(email);
-
--- With index: B-Tree lookup — O(log n)
-SELECT * FROM users WHERE email = 'john@example.com';
-```
-
-### When Indexes Help
-- `WHERE` clauses
-- `JOIN` conditions
-- `ORDER BY` and `GROUP BY`
-
-### When Indexes Hurt
-- Tables with heavy `INSERT/UPDATE/DELETE` (index must be updated)
-- Small tables (full scan is faster than index lookup)
-- Columns with low cardinality (e.g., boolean `is_active`)
-
-### Composite Index Rule
-```sql
--- Index on (A, B, C) supports:
--- WHERE A = ?            ✓
--- WHERE A = ? AND B = ?  ✓
--- WHERE B = ?            ✗ (leftmost prefix rule!)
-```
-
-**Golden rule**: Index columns you **filter** and **sort** by most frequently."""
-    },
-    {
-        "category": "dsa",
-        "title": "Two Pointer Technique for Array Problems",
-        "content": """## Two Pointer Technique
-
-One of the most powerful patterns for array/string problems. Reduces O(n²) brute force to O(n).
-
-### Pattern 1: Opposite Ends (Sorted Array)
-```java
-// Two Sum in Sorted Array
-public int[] twoSum(int[] nums, int target) {
-    int left = 0, right = nums.length - 1;
-    while (left < right) {
-        int sum = nums[left] + nums[right];
-        if (sum == target) return new int[]{left, right};
-        else if (sum < target) left++;
-        else right--;
-    }
-    return new int[]{-1, -1};
-}
-```
-
-### Pattern 2: Same Direction (Fast & Slow)
-```java
-// Remove duplicates from sorted array — in place
-public int removeDuplicates(int[] nums) {
-    int slow = 0;
-    for (int fast = 1; fast < nums.length; fast++) {
-        if (nums[fast] != nums[slow]) {
-            slow++;
-            nums[slow] = nums[fast];
-        }
-    }
-    return slow + 1;
-}
-```
-
-### When to Use Two Pointers
-- Sorted arrays with pair/triplet finding
-- Removing duplicates in-place
-- Palindrome checking
-- Container with most water
-- Merging sorted arrays"""
-    },
-    {
-        "category": "dsa",
-        "title": "Sliding Window Pattern",
-        "content": """## Sliding Window — Subarray/Substring Problems
-
-Used when you need to find a contiguous subarray/substring that satisfies a condition.
-
-### Fixed Window: Max sum of k consecutive elements
-```java
-public int maxSumSubarray(int[] arr, int k) {
-    int windowSum = 0, maxSum = 0;
-
-    for (int i = 0; i < arr.length; i++) {
-        windowSum += arr[i];
-        if (i >= k) windowSum -= arr[i - k]; // Slide: remove leftmost
-        if (i >= k - 1) maxSum = Math.max(maxSum, windowSum);
-    }
-    return maxSum;
-}
-```
-
-### Variable Window: Longest substring without repeating chars
-```java
-public int lengthOfLongestSubstring(String s) {
-    Set<Character> window = new HashSet<>();
-    int left = 0, maxLen = 0;
-
-    for (int right = 0; right < s.length(); right++) {
-        while (window.contains(s.charAt(right))) {
-            window.remove(s.charAt(left));
-            left++;
-        }
-        window.add(s.charAt(right));
-        maxLen = Math.max(maxLen, right - left + 1);
-    }
-    return maxLen;
-}
-```
-
-### Identifying Sliding Window Problems
-Keywords: "contiguous", "subarray", "substring", "window of size k", "maximum/minimum" in a range."""
-    },
-    {
-        "category": "dotnet",
-        "title": "Dependency Injection in ASP.NET Core",
-        "content": """## Dependency Injection in ASP.NET Core
-
-ASP.NET Core has DI built into the framework — no third-party container needed.
-
-### Service Lifetimes
-```csharp
-var builder = WebApplication.CreateBuilder(args);
-
-// Transient — New instance every time it's requested
-builder.Services.AddTransient<IEmailService, EmailService>();
-
-// Scoped — One instance per HTTP request
-builder.Services.AddScoped<IOrderService, OrderService>();
-
-// Singleton — One instance for the entire app lifetime
-builder.Services.AddSingleton<ICacheService, CacheService>();
-```
-
-### Constructor Injection
-```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class OrdersController : ControllerBase
-{
-    private readonly IOrderService _orderService;
-    private readonly ILogger<OrdersController> _logger;
-
-    // Dependencies injected via constructor
-    public OrdersController(IOrderService orderService, ILogger<OrdersController> logger)
-    {
-        _orderService = orderService;
-        _logger = logger;
-    }
-
-    [HttpGet("{id}")]
-    public async Task<IActionResult> Get(int id)
-    {
-        var order = await _orderService.GetByIdAsync(id);
-        return order == null ? NotFound() : Ok(order);
-    }
-}
-```
-
-### Choosing the Right Lifetime
-| Lifetime | Use Case |
-|:---|:---|
-| Transient | Lightweight, stateless services |
-| Scoped | Database contexts, per-request data |
-| Singleton | Caching, configuration, HTTP clients |"""
-    },
-    {
-        "category": "dotnet",
-        "title": "Entity Framework Core - Eager vs Lazy vs Explicit Loading",
-        "content": """## EF Core Loading Strategies
-
-### Eager Loading — Load related data upfront
-```csharp
-// Include related entities in the query
-var orders = await context.Orders
-    .Include(o => o.Customer)
-    .Include(o => o.OrderItems)
-        .ThenInclude(oi => oi.Product)
-    .ToListAsync();
-```
-
-### Lazy Loading — Load on access (be careful!)
-```csharp
-// Requires Microsoft.EntityFrameworkCore.Proxies
-// Navigation properties loaded when first accessed
-var order = await context.Orders.FindAsync(1);
-var customer = order.Customer; // DB query happens HERE
-```
-
-### Explicit Loading — Load manually when needed
-```csharp
-var order = await context.Orders.FindAsync(1);
-
-// Explicitly load related data
-await context.Entry(order)
-    .Reference(o => o.Customer)
-    .LoadAsync();
-
-await context.Entry(order)
-    .Collection(o => o.OrderItems)
-    .LoadAsync();
-```
-
-### Which to Choose?
-| Strategy | Pros | Cons |
-|:---|:---|:---|
-| Eager | Predictable, fewer queries | May load too much data |
-| Lazy | Simple code | N+1 query problem! |
-| Explicit | Full control | Verbose code |
-
-**Best Practice**: Default to **Eager Loading**, avoid Lazy Loading in production."""
-    },
-    {
-        "category": "database",
-        "title": "SQL JOIN Types Visual Guide",
-        "content": """## SQL JOIN Types — When to Use Each
-
-### INNER JOIN — Only matching rows
-```sql
-SELECT u.name, o.total
-FROM users u
-INNER JOIN orders o ON u.id = o.user_id;
--- Returns only users who have orders
-```
-
-### LEFT JOIN — All from left + matching from right
-```sql
-SELECT u.name, COALESCE(COUNT(o.id), 0) as order_count
-FROM users u
-LEFT JOIN orders o ON u.id = o.user_id
-GROUP BY u.name;
--- Returns ALL users, even those without orders
-```
-
-### RIGHT JOIN — All from right + matching from left
-```sql
-SELECT u.name, o.total
-FROM users u
-RIGHT JOIN orders o ON u.id = o.user_id;
--- Returns ALL orders, even orphaned ones
-```
-
-### FULL OUTER JOIN — Everything from both
-```sql
-SELECT u.name, o.total
-FROM users u
-FULL OUTER JOIN orders o ON u.id = o.user_id;
--- Returns all users AND all orders
-```
-
-### Performance Tip
-Always ensure JOIN columns are indexed:
-```sql
-CREATE INDEX idx_orders_user_id ON orders(user_id);
-```"""
-    },
-    {
-        "category": "database",
-        "title": "SQL Query Optimization Checklist",
-        "content": """## SQL Query Optimization — Quick Checklist
-
-### 1. Use EXPLAIN to analyze queries
-```sql
-EXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'pending';
--- Look for: Seq Scan (bad) vs Index Scan (good)
-```
-
-### 2. Avoid SELECT * in production
-```sql
--- Bad: fetches ALL columns
-SELECT * FROM users;
-
--- Good: fetch only what you need
-SELECT id, name, email FROM users;
-```
-
-### 3. Use EXISTS instead of IN for subqueries
-```sql
--- Slower with large datasets
-SELECT * FROM users WHERE id IN (SELECT user_id FROM orders);
-
--- Faster: stops at first match
-SELECT * FROM users u WHERE EXISTS (
-    SELECT 1 FROM orders o WHERE o.user_id = u.id
-);
-```
-
-### 4. Pagination with OFFSET is slow for large pages
-```sql
--- Slow for page 1000
-SELECT * FROM posts ORDER BY id LIMIT 20 OFFSET 20000;
-
--- Faster: cursor-based pagination
-SELECT * FROM posts WHERE id > 20000 ORDER BY id LIMIT 20;
-```
-
-### 5. Batch INSERT instead of single rows
-```sql
--- Slow: 1000 round trips
-INSERT INTO logs (msg) VALUES ('a');
-INSERT INTO logs (msg) VALUES ('b');
-
--- Fast: 1 round trip
-INSERT INTO logs (msg) VALUES ('a'), ('b'), ('c'), ...;
-```"""
-    },
-    {
-        "category": "git",
-        "title": "Git Rebase vs Merge - When to Use Which",
-        "content": """## Git Rebase vs Merge
-
-### Merge — Preserves history
-```bash
-git checkout main
-git merge feature-branch
-# Creates a merge commit, preserves branch history
-```
-
-### Rebase — Linear history
-```bash
-git checkout feature-branch
-git rebase main
-# Replays your commits on top of main — clean, linear history
-```
-
-### Golden Rule
-> **Never rebase public/shared branches.** Only rebase your local feature branches.
-
-### Interactive Rebase — Clean up before merging
-```bash
-git rebase -i HEAD~3
-# pick abc1234 Add user model
-# squash def5678 Fix typo in user model
-# pick ghi9012 Add user API endpoint
-# Combines the typo fix into the first commit
-```
-
-### My Workflow
-1. Work on feature branch
-2. `git rebase main` to get latest changes
-3. `git rebase -i` to squash/clean commits
-4. Create PR with clean history"""
-    },
-    {
-        "category": "git",
-        "title": "Useful Git Commands I Use Daily",
-        "content": """## Git Commands That Save Time
-
-### Undo last commit (keep changes)
-```bash
-git reset --soft HEAD~1
-```
-
-### See what changed in a file
-```bash
-git diff HEAD~1 -- path/to/file.java
-```
-
-### Stash with a message
-```bash
-git stash push -m "WIP: half-done feature"
-git stash list
-git stash pop stash@{0}
-```
-
-### Find which commit broke something
-```bash
-git bisect start
-git bisect bad          # current commit is broken
-git bisect good abc123  # this old commit was fine
-# Git will binary search through commits
-```
-
-### Cherry-pick a specific commit
-```bash
-git cherry-pick abc1234
-# Applies just that one commit to current branch
-```
-
-### View pretty log
-```bash
-git log --oneline --graph --all --decorate -20
-```
-
-### Clean up merged branches
-```bash
-git branch --merged | grep -v main | xargs git branch -d
-```"""
-    },
-    {
-        "category": "devops",
-        "title": "Docker Multi-Stage Builds for Java Apps",
-        "content": """## Docker Multi-Stage Builds
-
-Reduces image size dramatically by separating build and runtime.
-
-### Without Multi-Stage (800MB+)
-```dockerfile
-FROM maven:3.9-eclipse-temurin-17
-COPY . .
-RUN mvn clean package -DskipTests
-CMD ["java", "-jar", "target/app.jar"]
-# Image includes Maven, source code, build tools — huge!
-```
-
-### With Multi-Stage (200MB)
-```dockerfile
-# Stage 1: Build
-FROM maven:3.9-eclipse-temurin-17 AS builder
-WORKDIR /app
-COPY pom.xml .
-RUN mvn dependency:resolve
-COPY src ./src
-RUN mvn clean package -DskipTests
-
-# Stage 2: Run
-FROM eclipse-temurin:17-jre-alpine
-WORKDIR /app
-COPY --from=builder /app/target/*.jar app.jar
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
-
-### Benefits
-- **75% smaller** image size
-- No build tools in production image
-- Faster deployments and pulls
-- Smaller attack surface (security)"""
-    },
-    {
-        "category": "spring-boot",
-        "title": "Spring Boot Profiles for Environment Configuration",
-        "content": """## Managing Environments with Spring Profiles
-
-### Define profile-specific configs
-
-**application-dev.yml**
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/myapp_dev
-    username: root
-    password: root
-  jpa:
-    show-sql: true
-```
-
-**application-prod.yml**
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://prod-server:3306/myapp
-    username: ${DB_USER}
-    password: ${DB_PASS}
-  jpa:
-    show-sql: false
-```
-
-### Activate a profile
-```bash
-# Command line
-java -jar app.jar --spring.profiles.active=prod
-
-# Environment variable
-export SPRING_PROFILES_ACTIVE=prod
-
-# In application.yml
-spring:
-  profiles:
-    active: dev
-```
-
-### Profile-specific beans
-```java
-@Configuration
-@Profile("dev")
-public class DevConfig {
-    @Bean
-    public DataSource dataSource() {
-        return new EmbeddedDatabaseBuilder()
-            .setType(EmbeddedDatabaseType.H2)
-            .build();
-    }
-}
-```"""
-    },
-    {
-        "category": "java",
-        "title": "Java Optional - Avoiding NullPointerException",
-        "content": """## Using Optional to Avoid NullPointerException
-
-### Anti-Pattern: Null checks everywhere
-```java
-// Ugly and error-prone
-User user = userRepository.findById(id);
-if (user != null) {
-    Address address = user.getAddress();
-    if (address != null) {
-        return address.getCity();
-    }
-}
-return "Unknown";
-```
-
-### Better: Optional chaining
-```java
-String city = userRepository.findById(id)    // Returns Optional<User>
-    .map(User::getAddress)
-    .map(Address::getCity)
-    .orElse("Unknown");
-```
-
-### Common Optional Methods
-```java
-Optional<User> opt = Optional.ofNullable(user);
-
-opt.isPresent();                    // Check if value exists
-opt.ifPresent(u -> log(u));         // Execute if present
-opt.orElse(defaultUser);            // Fallback value
-opt.orElseThrow(() -> new NotFoundException("User not found"));
-opt.filter(u -> u.isActive());      // Conditional filter
-opt.map(User::getName);             // Transform value
-```
-
-### Rules
-- Never use `Optional` as a method parameter or field
-- Use it as a **return type** to signal "might be empty"
-- Never call `.get()` without checking `.isPresent()` first"""
-    },
-    {
-        "category": "react",
-        "title": "React Context API vs Redux - When to Choose What",
-        "content": """## Context API vs Redux
-
-### Context API — Built-in, simple
-```jsx
-const ThemeContext = createContext('light');
-
-function App() {
-  const [theme, setTheme] = useState('dark');
-  return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
-      <Dashboard />
-    </ThemeContext.Provider>
-  );
-}
-
-function Dashboard() {
-  const { theme, setTheme } = useContext(ThemeContext);
-  return <button onClick={() => setTheme('light')}>{theme}</button>;
-}
-```
-
-### When to Use Context
-- Theme, locale, auth state
-- Data that doesn't change frequently
-- Small to medium apps
-
-### When to Use Redux
-- Complex state with many updates
-- State shared across many unrelated components
-- Need middleware (logging, async, undo/redo)
-- Large applications with multiple developers
-
-### Rule of Thumb
-> Start with Context + useReducer. Move to Redux only when Context re-renders become a problem."""
-    },
-    {
-        "category": "system-design",
-        "title": "Rate Limiting Strategies",
-        "content": """## Rate Limiting — Protecting Your APIs
-
-### Why Rate Limit?
-- Prevent abuse and DDoS attacks
-- Fair usage across users
-- Protect downstream services
-
-### Token Bucket Algorithm
-```
-Bucket capacity: 10 tokens
-Refill rate: 1 token/second
-
-Request comes in:
-  - If tokens > 0: Allow request, remove 1 token
-  - If tokens == 0: Reject (429 Too Many Requests)
-```
-
-### Implementation in Spring Boot
-```java
-@Component
-public class RateLimitFilter extends OncePerRequestFilter {
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
-
-    private Bucket createBucket() {
-        return Bucket.builder()
-            .addLimit(Bandwidth.classic(10, Refill.greedy(10, Duration.ofMinutes(1))))
-            .build();
-    }
-
-    @Override
-    protected void doFilterInternal(HttpServletRequest req,
-            HttpServletResponse res, FilterChain chain) {
-        String ip = req.getRemoteAddr();
-        Bucket bucket = buckets.computeIfAbsent(ip, k -> createBucket());
-
-        if (bucket.tryConsume(1)) {
-            chain.doFilter(req, res);
-        } else {
-            res.setStatus(429);
-            res.getWriter().write("Rate limit exceeded");
-        }
-    }
-}
-```
-
-### Common Strategies
-| Algorithm | Best For |
-|:---|:---|
-| Token Bucket | Smooth rate limiting with burst allowance |
-| Fixed Window | Simple, easy to implement |
-| Sliding Window | Most accurate, prevents boundary issues |"""
-    },
-    {
-        "category": "dsa",
-        "title": "Binary Search Beyond Sorted Arrays",
-        "content": """## Binary Search — Not Just for Sorted Arrays
-
-### Classic Binary Search
-```java
-public int binarySearch(int[] nums, int target) {
-    int lo = 0, hi = nums.length - 1;
-    while (lo <= hi) {
-        int mid = lo + (hi - lo) / 2;  // Prevents overflow
-        if (nums[mid] == target) return mid;
-        else if (nums[mid] < target) lo = mid + 1;
-        else hi = mid - 1;
-    }
-    return -1;
-}
-```
-
-### Binary Search on Answer
-Find minimum capacity to ship packages in D days:
-```java
-public int shipWithinDays(int[] weights, int days) {
-    int lo = Arrays.stream(weights).max().getAsInt();
-    int hi = Arrays.stream(weights).sum();
-
-    while (lo < hi) {
-        int mid = lo + (hi - lo) / 2;
-        if (canShip(weights, days, mid)) hi = mid;
-        else lo = mid + 1;
-    }
-    return lo;
-}
-
-private boolean canShip(int[] weights, int days, int capacity) {
-    int currentLoad = 0, daysNeeded = 1;
-    for (int w : weights) {
-        if (currentLoad + w > capacity) {
-            daysNeeded++;
-            currentLoad = 0;
-        }
-        currentLoad += w;
-    }
-    return daysNeeded <= days;
-}
-```
-
-### When to Think Binary Search
-- "Find minimum/maximum value that satisfies condition"
-- Monotonic function (if X works, X+1 also works)
-- Search space can be halved each step"""
-    },
-    {
-        "category": "javascript",
-        "title": "JavaScript Event Loop Explained",
-        "content": """## The Event Loop — Why JS is Single-Threaded But Non-Blocking
-
-```javascript
-console.log('1');                    // Synchronous
-
-setTimeout(() => {
-  console.log('2');                  // Macro task
-}, 0);
-
-Promise.resolve().then(() => {
-  console.log('3');                  // Micro task
-});
-
-console.log('4');                    // Synchronous
-
-// Output: 1, 4, 3, 2
-```
-
-### Execution Order
-1. **Call Stack** — Runs synchronous code (1, 4)
-2. **Microtask Queue** — Promises, queueMicrotask (3)
-3. **Macrotask Queue** — setTimeout, setInterval, I/O (2)
-
-### Why Does This Matter?
-```javascript
-// This BLOCKS the main thread!
-while (true) { /* infinite loop */ }
-
-// This does NOT block — it's async
-setInterval(() => checkForUpdates(), 1000);
-```
-
-### Key Takeaway
-Microtasks (Promises) always run before macrotasks (setTimeout), even if setTimeout has a 0ms delay."""
-    }
+    # ============================================================
+    # JAVA CORE (40 topics)
+    # ============================================================
+    {"category": "java", "title": "HashMap vs ConcurrentHashMap", "content": """## HashMap vs ConcurrentHashMap\n\n`HashMap` is not thread-safe. `ConcurrentHashMap` uses segment-level locking (Java 7) or CAS operations (Java 8+).\n\n```java\n// Not thread-safe\nMap<String, Integer> map = new HashMap<>();\n\n// Thread-safe\nMap<String, Integer> concurrentMap = new ConcurrentHashMap<>();\nconcurrentMap.put(\"key\", 1);\nconcurrentMap.computeIfAbsent(\"key2\", k -> 2);\n```\n\n| Feature | HashMap | ConcurrentHashMap |\n|:---|:---|:---|\n| Thread Safety | No | Yes |\n| Null Keys | Allowed (1) | Not Allowed |\n| Performance (single thread) | Faster | Slightly slower |\n| Locking | None | Segment/Bucket level |"""},
+    {"category": "java", "title": "Java Stream API - reduce vs collect", "content": """## reduce() vs collect()\n\n### reduce() — Combines into a single value\n```java\nint sum = List.of(1,2,3,4,5).stream().reduce(0, Integer::sum); // 15\n```\n\n### collect() — Gathers into a collection\n```java\nSet<String> unique = names.stream().collect(Collectors.toSet());\nMap<Character, List<String>> grouped = names.stream()\n    .collect(Collectors.groupingBy(s -> s.charAt(0)));\n```\n\n**Rule**: `reduce()` for single value, `collect()` for collections."""},
+    {"category": "java", "title": "Optional - Avoiding NullPointerException", "content": """## Using Optional\n\n```java\n// Bad: null checks everywhere\nif (user != null && user.getAddress() != null)\n    return user.getAddress().getCity();\n\n// Good: Optional chaining\nString city = userRepository.findById(id)\n    .map(User::getAddress)\n    .map(Address::getCity)\n    .orElse(\"Unknown\");\n```\n\n### Key Methods\n- `orElse(default)` — fallback value\n- `orElseThrow()` — throw if empty\n- `map()` — transform value\n- `filter()` — conditional check\n\n**Rule**: Use Optional as return type only, never as method parameter."""},
+    {"category": "java", "title": "Java Generics - Wildcards Explained", "content": """## Generics Wildcards\n\n```java\n// Upper bound: accepts Number or subclass\npublic double sum(List<? extends Number> list) {\n    return list.stream().mapToDouble(Number::doubleValue).sum();\n}\n\n// Lower bound: accepts Integer or superclass\npublic void addIntegers(List<? super Integer> list) {\n    list.add(1);\n    list.add(2);\n}\n```\n\n### PECS Rule\n- **Producer Extends** — read from it: `<? extends T>`\n- **Consumer Super** — write to it: `<? super T>`\n\n```java\nsum(List.of(1, 2, 3));       // Works: Integer extends Number\nsum(List.of(1.5, 2.5));      // Works: Double extends Number\n```"""},
+    {"category": "java", "title": "Java Records - Immutable Data Classes", "content": """## Java Records (Java 14+)\n\nRecords auto-generate constructor, getters, equals(), hashCode(), and toString().\n\n```java\n// Before: 50+ lines of boilerplate\npublic class Point {\n    private final int x, y;\n    public Point(int x, int y) { this.x = x; this.y = y; }\n    public int getX() { return x; }\n    // ... equals, hashCode, toString\n}\n\n// After: 1 line\npublic record Point(int x, int y) {}\n\n// Usage\nPoint p = new Point(1, 2);\nSystem.out.println(p.x());  // 1\nSystem.out.println(p);      // Point[x=1, y=2]\n```\n\n### Custom Validation\n```java\npublic record Age(int value) {\n    public Age {\n        if (value < 0) throw new IllegalArgumentException(\"Age cannot be negative\");\n    }\n}\n```"""},
+    {"category": "java", "title": "Sealed Classes in Java", "content": """## Sealed Classes (Java 17)\n\nRestrict which classes can extend a class.\n\n```java\npublic sealed class Shape permits Circle, Rectangle, Triangle {}\n\npublic final class Circle extends Shape {\n    double radius;\n}\n\npublic final class Rectangle extends Shape {\n    double width, height;\n}\n\npublic non-sealed class Triangle extends Shape {\n    // Can be extended further\n}\n```\n\n### Pattern Matching with Sealed Classes\n```java\npublic double area(Shape shape) {\n    return switch (shape) {\n        case Circle c -> Math.PI * c.radius * c.radius;\n        case Rectangle r -> r.width * r.height;\n        case Triangle t -> 0.5 * t.base * t.height;\n    }; // No default needed — compiler knows all subtypes!\n}\n```"""},
+    {"category": "java", "title": "CompletableFuture for Async Programming", "content": """## CompletableFuture\n\nAsync programming without blocking threads.\n\n```java\nCompletableFuture<String> future = CompletableFuture\n    .supplyAsync(() -> fetchUserFromDB(id))\n    .thenApply(user -> user.getName())\n    .thenApply(String::toUpperCase)\n    .exceptionally(ex -> \"ERROR: \" + ex.getMessage());\n\nString result = future.join(); // Blocks only when needed\n```\n\n### Combining Multiple Futures\n```java\nCompletableFuture<User> userFuture = CompletableFuture.supplyAsync(() -> getUser(id));\nCompletableFuture<List<Order>> ordersFuture = CompletableFuture.supplyAsync(() -> getOrders(id));\n\n// Run both in parallel, combine results\nCompletableFuture<UserProfile> profile = userFuture\n    .thenCombine(ordersFuture, (user, orders) -> new UserProfile(user, orders));\n```"""},
+    {"category": "java", "title": "Java Virtual Threads (Project Loom)", "content": """## Virtual Threads (Java 21)\n\nLightweight threads managed by JVM, not OS. Millions can run concurrently.\n\n```java\n// Traditional platform thread\nThread.ofPlatform().start(() -> handleRequest());\n\n// Virtual thread — extremely lightweight\nThread.ofVirtual().start(() -> handleRequest());\n\n// Using ExecutorService\ntry (var executor = Executors.newVirtualThreadPerTaskExecutor()) {\n    for (int i = 0; i < 100_000; i++) {\n        executor.submit(() -> {\n            Thread.sleep(Duration.ofSeconds(1));\n            return fetchData();\n        });\n    }\n} // All 100K tasks run concurrently!\n```\n\n### When to Use\n- I/O-bound tasks (HTTP calls, DB queries)\n- NOT for CPU-bound computation\n- Replaces reactive programming for many use cases"""},
+    {"category": "java", "title": "Java Functional Interfaces", "content": """## Functional Interfaces\n\nAn interface with exactly one abstract method. Foundation of lambda expressions.\n\n```java\n// Built-in functional interfaces\nPredicate<String> isLong = s -> s.length() > 5;\nFunction<String, Integer> toLength = String::length;\nConsumer<String> printer = System.out::println;\nSupplier<String> greeting = () -> \"Hello!\";\nBiFunction<Integer, Integer, Integer> add = Integer::sum;\n\n// Usage\nList<String> filtered = names.stream()\n    .filter(isLong)\n    .map(toLength)\n    .collect(Collectors.toList());\n```\n\n### Custom Functional Interface\n```java\n@FunctionalInterface\npublic interface Validator<T> {\n    boolean validate(T t);\n}\n\nValidator<String> emailValidator = email -> email.contains(\"@\");\n```"""},
+    {"category": "java", "title": "Java Enum Advanced Usage", "content": """## Enums Beyond Constants\n\n```java\npublic enum HttpStatus {\n    OK(200, \"Success\"),\n    NOT_FOUND(404, \"Not Found\"),\n    INTERNAL_ERROR(500, \"Internal Server Error\");\n\n    private final int code;\n    private final String message;\n\n    HttpStatus(int code, String message) {\n        this.code = code;\n        this.message = message;\n    }\n\n    public int getCode() { return code; }\n    public String getMessage() { return message; }\n\n    // Reverse lookup\n    public static HttpStatus fromCode(int code) {\n        return Arrays.stream(values())\n            .filter(s -> s.code == code)\n            .findFirst()\n            .orElseThrow(() -> new IllegalArgumentException(\"Unknown code: \" + code));\n    }\n}\n\n// Usage\nHttpStatus status = HttpStatus.fromCode(404);\nSystem.out.println(status.getMessage()); // Not Found\n```"""},
+    {"category": "java", "title": "Try-with-Resources and AutoCloseable", "content": """## Try-with-Resources\n\nAutomatically closes resources, preventing memory leaks.\n\n```java\n// Before Java 7: manual close, error-prone\nBufferedReader br = null;\ntry {\n    br = new BufferedReader(new FileReader(\"file.txt\"));\n    return br.readLine();\n} finally {\n    if (br != null) br.close();\n}\n\n// After: automatic close\ntry (BufferedReader br = new BufferedReader(new FileReader(\"file.txt\"))) {\n    return br.readLine();\n} // br.close() called automatically!\n\n// Multiple resources\ntry (Connection conn = dataSource.getConnection();\n     PreparedStatement ps = conn.prepareStatement(sql);\n     ResultSet rs = ps.executeQuery()) {\n    while (rs.next()) {\n        // process results\n    }\n} // All three closed in reverse order\n```\n\nImplement `AutoCloseable` for custom resources:\n```java\npublic class MyResource implements AutoCloseable {\n    @Override\n    public void close() { /* cleanup */ }\n}\n```"""},
+    {"category": "java", "title": "Java Collections - Choosing the Right One", "content": """## Java Collections Cheat Sheet\n\n| Need | Use | Why |\n|:---|:---|:---|\n| Ordered, duplicates OK | `ArrayList` | O(1) random access |\n| Frequent insert/delete | `LinkedList` | O(1) add/remove at ends |\n| No duplicates | `HashSet` | O(1) add/contains |\n| Sorted, no duplicates | `TreeSet` | O(log n), sorted order |\n| Key-value pairs | `HashMap` | O(1) get/put |\n| Sorted key-value | `TreeMap` | O(log n), sorted keys |\n| Insertion order map | `LinkedHashMap` | O(1) + maintains order |\n| Thread-safe map | `ConcurrentHashMap` | Segment-level locking |\n| FIFO queue | `ArrayDeque` | Faster than LinkedList |\n| Priority ordering | `PriorityQueue` | Min-heap by default |\n\n```java\n// Immutable collections (Java 9+)\nList<String> list = List.of(\"a\", \"b\", \"c\");\nSet<Integer> set = Set.of(1, 2, 3);\nMap<String, Integer> map = Map.of(\"key\", 1);\n```"""},
+    {"category": "java", "title": "Java Design Pattern - Builder", "content": """## Builder Pattern\n\nClean way to construct complex objects step by step.\n\n```java\npublic class User {\n    private final String name;\n    private final String email;\n    private final int age;\n    private final String phone;\n\n    private User(Builder builder) {\n        this.name = builder.name;\n        this.email = builder.email;\n        this.age = builder.age;\n        this.phone = builder.phone;\n    }\n\n    public static class Builder {\n        private final String name;  // required\n        private String email;\n        private int age;\n        private String phone;\n\n        public Builder(String name) { this.name = name; }\n        public Builder email(String val) { email = val; return this; }\n        public Builder age(int val) { age = val; return this; }\n        public Builder phone(String val) { phone = val; return this; }\n        public User build() { return new User(this); }\n    }\n}\n\n// Usage\nUser user = new User.Builder(\"Dipak\")\n    .email(\"dipak@email.com\")\n    .age(24)\n    .build();\n```"""},
+    {"category": "java", "title": "Java Design Pattern - Singleton", "content": """## Singleton Pattern - Thread Safe\n\n```java\n// Enum Singleton (Recommended by Joshua Bloch)\npublic enum DatabaseConnection {\n    INSTANCE;\n    \n    private Connection connection;\n    \n    DatabaseConnection() {\n        connection = DriverManager.getConnection(URL);\n    }\n    \n    public Connection getConnection() { return connection; }\n}\n\n// Usage\nConnection conn = DatabaseConnection.INSTANCE.getConnection();\n```\n\n### Double-Checked Locking\n```java\npublic class Singleton {\n    private static volatile Singleton instance;\n    \n    private Singleton() {}\n    \n    public static Singleton getInstance() {\n        if (instance == null) {\n            synchronized (Singleton.class) {\n                if (instance == null) {\n                    instance = new Singleton();\n                }\n            }\n        }\n        return instance;\n    }\n}\n```\n\n**Best approach**: Use Enum or let Spring manage it as a bean."""},
+    {"category": "java", "title": "Java String Pool and Immutability", "content": """## String Pool\n\nJava maintains a pool of string literals to save memory.\n\n```java\nString s1 = \"hello\";      // Goes to string pool\nString s2 = \"hello\";      // Points to same pool object\nString s3 = new String(\"hello\"); // Creates new object on heap\n\nSystem.out.println(s1 == s2);      // true (same reference)\nSystem.out.println(s1 == s3);      // false (different objects)\nSystem.out.println(s1.equals(s3)); // true (same content)\n\n// Intern: add to pool\nString s4 = s3.intern();\nSystem.out.println(s1 == s4);      // true\n```\n\n### Why Strings are Immutable\n1. **Thread safety** — can be shared without synchronization\n2. **Caching** — hashCode computed once, cached\n3. **Security** — DB URLs, file paths can't be modified\n4. **String pool** — only works because strings don't change"""},
+    {"category": "java", "title": "Java Exception Handling Best Practices", "content": """## Exception Handling Best Practices\n\n### 1. Use specific exceptions\n```java\n// Bad\ncatch (Exception e) { }\n\n// Good\ncatch (FileNotFoundException e) {\n    log.error(\"Config file missing\", e);\n}\n```\n\n### 2. Never swallow exceptions\n```java\n// Bad — silent failure\ncatch (Exception e) { }\n\n// Good — at least log it\ncatch (Exception e) {\n    log.error(\"Operation failed\", e);\n    throw new ServiceException(\"Unable to process\", e);\n}\n```\n\n### 3. Use custom exceptions\n```java\npublic class ResourceNotFoundException extends RuntimeException {\n    public ResourceNotFoundException(String resource, Long id) {\n        super(String.format(\"%s not found with id: %d\", resource, id));\n    }\n}\n\n// Usage\nthrow new ResourceNotFoundException(\"User\", userId);\n```\n\n### 4. Checked vs Unchecked\n- **Checked** (IOException): Recoverable, force caller to handle\n- **Unchecked** (NullPointerException): Programming errors, don't catch"""},
+    {"category": "java", "title": "Java Multithreading - synchronized vs ReentrantLock", "content": """## synchronized vs ReentrantLock\n\n```java\n// synchronized — simple, implicit\npublic synchronized void increment() {\n    count++;\n}\n\n// ReentrantLock — flexible, explicit\nprivate final ReentrantLock lock = new ReentrantLock();\n\npublic void increment() {\n    lock.lock();\n    try {\n        count++;\n    } finally {\n        lock.unlock(); // Always unlock in finally!\n    }\n}\n```\n\n### When to Use ReentrantLock\n- Need `tryLock()` with timeout\n- Need `lockInterruptibly()`\n- Need fairness (FIFO ordering)\n- Need multiple condition variables\n\n```java\n// Try lock with timeout\nif (lock.tryLock(5, TimeUnit.SECONDS)) {\n    try { /* critical section */ }\n    finally { lock.unlock(); }\n} else {\n    log.warn(\"Could not acquire lock\");\n}\n```"""},
+    {"category": "java", "title": "Java Garbage Collection Basics", "content": """## Garbage Collection\n\nJVM automatically reclaims memory from unreachable objects.\n\n### Heap Generations\n```\n┌─────────────────────────────────────┐\n│            Young Generation          │\n│  ┌──────┐  ┌──────┐  ┌──────┐      │\n│  │ Eden │  │  S0  │  │  S1  │      │\n│  └──────┘  └──────┘  └──────┘      │\n├─────────────────────────────────────┤\n│           Old Generation             │\n├─────────────────────────────────────┤\n│            Metaspace                 │\n└─────────────────────────────────────┘\n```\n\n### GC Types\n| GC | Best For |\n|:---|:---|\n| G1 GC (default) | General purpose, balanced |\n| ZGC | Ultra-low latency (<10ms pauses) |\n| Shenandoah | Low latency, concurrent |\n| Parallel GC | Maximum throughput |\n\n### Avoid Memory Leaks\n- Close resources (streams, connections)\n- Remove listeners when done\n- Be careful with static collections\n- Use WeakReference for caches"""},
+    {"category": "java", "title": "Java Pattern Matching instanceof", "content": """## Pattern Matching for instanceof (Java 16+)\n\n```java\n// Before: cast after check\nif (obj instanceof String) {\n    String s = (String) obj;\n    System.out.println(s.length());\n}\n\n// After: automatic cast\nif (obj instanceof String s) {\n    System.out.println(s.length()); // s already cast!\n}\n\n// Works with negation\nif (!(obj instanceof String s)) {\n    return;\n}\n// s is available here\n\n// Switch pattern matching (Java 21)\nString describe(Object obj) {\n    return switch (obj) {\n        case Integer i -> \"Integer: \" + i;\n        case String s  -> \"String of length \" + s.length();\n        case null      -> \"null\";\n        default        -> \"Unknown: \" + obj;\n    };\n}\n```"""},
+    {"category": "java", "title": "Java Comparator and Comparable", "content": """## Sorting Objects\n\n### Comparable — Natural ordering (inside the class)\n```java\npublic class Employee implements Comparable<Employee> {\n    String name;\n    int salary;\n    \n    @Override\n    public int compareTo(Employee other) {\n        return Integer.compare(this.salary, other.salary);\n    }\n}\nCollections.sort(employees); // Uses compareTo\n```\n\n### Comparator — Custom ordering (outside the class)\n```java\n// Sort by name\nemployees.sort(Comparator.comparing(Employee::getName));\n\n// Sort by salary descending, then name\nemployees.sort(\n    Comparator.comparing(Employee::getSalary).reversed()\n              .thenComparing(Employee::getName)\n);\n\n// Null-safe sorting\nemployees.sort(\n    Comparator.comparing(Employee::getName, \n        Comparator.nullsLast(Comparator.naturalOrder()))\n);\n```"""},
+
+    # ============================================================
+    # SPRING BOOT (35 topics)
+    # ============================================================
+    {"category": "spring-boot", "title": "Spring Boot @Transactional Propagation", "content": """## @Transactional Propagation\n\n```java\n@Transactional(propagation = Propagation.REQUIRED) // Default\npublic void createOrder(Order order) {\n    orderRepository.save(order);\n}\n\n@Transactional(propagation = Propagation.REQUIRES_NEW)\npublic void sendNotification(Order order) {\n    // Always creates NEW transaction\n    notificationRepository.save(new Notification(order));\n}\n```\n\n| Type | Behavior |\n|:---|:---|\n| REQUIRED | Join existing or create new |\n| REQUIRES_NEW | Always create new, suspend existing |\n| MANDATORY | Must run within existing txn |\n| NEVER | Must NOT run within a txn |\n\n**Gotcha**: `@Transactional` only works on **external** method calls (proxy-based)."""},
+    {"category": "spring-boot", "title": "Global Exception Handling with ControllerAdvice", "content": """## @ControllerAdvice\n\nCentralized error handling for all controllers.\n\n```java\n@RestControllerAdvice\npublic class GlobalExceptionHandler {\n\n    @ExceptionHandler(ResourceNotFoundException.class)\n    public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex) {\n        ErrorResponse error = new ErrorResponse(\n            HttpStatus.NOT_FOUND.value(), ex.getMessage(), LocalDateTime.now()\n        );\n        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);\n    }\n\n    @ExceptionHandler(MethodArgumentNotValidException.class)\n    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {\n        String msg = ex.getBindingResult().getFieldErrors().stream()\n            .map(e -> e.getField() + \": \" + e.getDefaultMessage())\n            .collect(Collectors.joining(\", \"));\n        return ResponseEntity.badRequest().body(new ErrorResponse(400, msg, LocalDateTime.now()));\n    }\n}\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot Profiles for Environments", "content": """## Spring Profiles\n\n### application-dev.yml\n```yaml\nspring:\n  datasource:\n    url: jdbc:mysql://localhost:3306/myapp_dev\n    username: root\n  jpa:\n    show-sql: true\n```\n\n### application-prod.yml\n```yaml\nspring:\n  datasource:\n    url: jdbc:mysql://prod-server:3306/myapp\n    username: ${{DB_USER}}\n  jpa:\n    show-sql: false\n```\n\n### Activate profile\n```bash\njava -jar app.jar --spring.profiles.active=prod\n```\n\n### Profile-specific beans\n```java\n@Configuration\n@Profile(\"dev\")\npublic class DevConfig {\n    @Bean\n    public DataSource dataSource() {\n        return new EmbeddedDatabaseBuilder().setType(H2).build();\n    }\n}\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot Bean Scopes", "content": """## Bean Scopes\n\n| Scope | Lifetime |\n|:---|:---|\n| `singleton` (default) | One instance per Spring container |\n| `prototype` | New instance every time requested |\n| `request` | One per HTTP request |\n| `session` | One per HTTP session |\n\n```java\n@Component\n@Scope(\"prototype\")\npublic class ShoppingCart {\n    private List<Item> items = new ArrayList<>();\n}\n\n// Singleton bean depending on prototype — use ObjectFactory\n@Component\npublic class OrderService {\n    @Autowired\n    private ObjectFactory<ShoppingCart> cartFactory;\n    \n    public ShoppingCart getNewCart() {\n        return cartFactory.getObject(); // New instance each time\n    }\n}\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot Validation with Annotations", "content": """## Request Validation\n\n```java\npublic class CreateUserRequest {\n    @NotBlank(message = \"Name is required\")\n    private String name;\n    \n    @Email(message = \"Invalid email\")\n    @NotBlank\n    private String email;\n    \n    @Min(value = 18, message = \"Must be 18+\")\n    private int age;\n    \n    @Pattern(regexp = \"^[0-9]{10}$\", message = \"Invalid phone\")\n    private String phone;\n}\n\n@RestController\npublic class UserController {\n    @PostMapping(\"/users\")\n    public ResponseEntity<?> create(@Valid @RequestBody CreateUserRequest req) {\n        // Only reaches here if validation passes\n        return ResponseEntity.ok(userService.create(req));\n    }\n}\n```\n\n### Custom Validator\n```java\n@Constraint(validatedBy = UniqueEmailValidator.class)\npublic @interface UniqueEmail {\n    String message() default \"Email already exists\";\n}\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot Caching with @Cacheable", "content": """## Caching\n\nReduce DB calls by caching frequently accessed data.\n\n```java\n@EnableCaching // On main class\n@SpringBootApplication\npublic class Application {}\n\n@Service\npublic class ProductService {\n    @Cacheable(value = \"products\", key = \"#id\")\n    public Product findById(Long id) {\n        // This DB call is cached after first execution\n        return productRepository.findById(id).orElseThrow();\n    }\n    \n    @CacheEvict(value = \"products\", key = \"#id\")\n    public void update(Long id, Product product) {\n        // Clears cache when product is updated\n        productRepository.save(product);\n    }\n    \n    @CacheEvict(value = \"products\", allEntries = true)\n    public void clearCache() {\n        // Clears all cached products\n    }\n}\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot Scheduling Tasks", "content": """## Scheduled Tasks\n\n```java\n@EnableScheduling\n@SpringBootApplication\npublic class Application {}\n\n@Component\npublic class ScheduledTasks {\n    \n    @Scheduled(fixedRate = 60000) // Every 60 seconds\n    public void checkExpiredTokens() {\n        tokenService.removeExpired();\n    }\n    \n    @Scheduled(cron = \"0 0 9 * * MON-FRI\") // 9 AM weekdays\n    public void sendDailyReport() {\n        reportService.generateAndSend();\n    }\n    \n    @Scheduled(fixedDelay = 30000) // 30s after last completion\n    public void syncData() {\n        externalApiService.sync();\n    }\n}\n```\n\n### Cron Expression\n```\nsecond minute hour day month weekday\n  0      0     9    *    *   MON-FRI\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot JWT Authentication Flow", "content": """## JWT Authentication\n\n### Flow\n```\n1. Client sends username/password\n2. Server validates, generates JWT token\n3. Client sends token in Authorization header\n4. Server validates token on each request\n```\n\n### Generate Token\n```java\npublic String generateToken(UserDetails userDetails) {\n    Map<String, Object> claims = new HashMap<>();\n    claims.put(\"role\", userDetails.getAuthorities());\n    \n    return Jwts.builder()\n        .setClaims(claims)\n        .setSubject(userDetails.getUsername())\n        .setIssuedAt(new Date())\n        .setExpiration(new Date(System.currentTimeMillis() + 86400000))\n        .signWith(SignatureAlgorithm.HS256, secretKey)\n        .compact();\n}\n```\n\n### Validate Token\n```java\npublic boolean validateToken(String token, UserDetails userDetails) {\n    String username = extractUsername(token);\n    return username.equals(userDetails.getUsername()) && !isTokenExpired(token);\n}\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot AOP - Cross Cutting Concerns", "content": """## Aspect Oriented Programming\n\nHandle logging, security, and metrics without polluting business logic.\n\n```java\n@Aspect\n@Component\npublic class LoggingAspect {\n    \n    @Around(\"execution(* com.app.service.*.*(..))\")\n    public Object logExecutionTime(ProceedingJoinPoint joinPoint) throws Throwable {\n        long start = System.currentTimeMillis();\n        \n        Object result = joinPoint.proceed();\n        \n        long duration = System.currentTimeMillis() - start;\n        log.info(\"{}.{} executed in {}ms\",\n            joinPoint.getSignature().getDeclaringTypeName(),\n            joinPoint.getSignature().getName(),\n            duration);\n        \n        return result;\n    }\n    \n    @Before(\"@annotation(com.app.annotation.Auditable)\")\n    public void audit(JoinPoint joinPoint) {\n        log.info(\"Audit: {} called with args: {}\",\n            joinPoint.getSignature().getName(),\n            Arrays.toString(joinPoint.getArgs()));\n    }\n}\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot REST API Pagination", "content": """## Pagination with Spring Data\n\n```java\n@GetMapping(\"/products\")\npublic Page<Product> getProducts(\n        @RequestParam(defaultValue = \"0\") int page,\n        @RequestParam(defaultValue = \"10\") int size,\n        @RequestParam(defaultValue = \"id\") String sortBy) {\n    \n    Pageable pageable = PageRequest.of(page, size, Sort.by(sortBy));\n    return productRepository.findAll(pageable);\n}\n```\n\n### Response\n```json\n{\n  \"content\": [{...}, {...}],\n  \"totalPages\": 5,\n  \"totalElements\": 50,\n  \"number\": 0,\n  \"size\": 10,\n  \"first\": true,\n  \"last\": false\n}\n```\n\n### Custom query with pagination\n```java\n@Query(\"SELECT p FROM Product p WHERE p.price > :minPrice\")\nPage<Product> findExpensive(@Param(\"minPrice\") double minPrice, Pageable pageable);\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot MapStruct for Object Mapping", "content": """## MapStruct - DTO to Entity Mapping\n\nCompile-time code generation, zero reflection overhead.\n\n```java\n// DTO\npublic record UserDTO(String fullName, String email, String phone) {}\n\n// Entity\n@Entity\npublic class User {\n    private String name;\n    private String email;\n    private String phoneNumber;\n}\n\n// Mapper\n@Mapper(componentModel = \"spring\")\npublic interface UserMapper {\n    @Mapping(source = \"fullName\", target = \"name\")\n    @Mapping(source = \"phone\", target = \"phoneNumber\")\n    User toEntity(UserDTO dto);\n    \n    @Mapping(source = \"name\", target = \"fullName\")\n    @Mapping(source = \"phoneNumber\", target = \"phone\")\n    UserDTO toDTO(User user);\n    \n    List<UserDTO> toDTOList(List<User> users);\n}\n\n// Usage\n@Autowired\nprivate UserMapper userMapper;\nUser entity = userMapper.toEntity(dto);\n```"""},
+    {"category": "spring-boot", "title": "Spring Boot Actuator - Monitoring", "content": """## Spring Boot Actuator\n\nProduction-ready monitoring endpoints.\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-actuator</artifactId>\n</dependency>\n```\n\n### application.yml\n```yaml\nmanagement:\n  endpoints:\n    web:\n      exposure:\n        include: health,info,metrics,env\n  endpoint:\n    health:\n      show-details: always\n```\n\n### Key Endpoints\n| Endpoint | Purpose |\n|:---|:---|\n| `/actuator/health` | App health status |\n| `/actuator/metrics` | JVM, HTTP, custom metrics |\n| `/actuator/info` | App info |\n| `/actuator/env` | Environment properties |\n\n### Custom Health Indicator\n```java\n@Component\npublic class DatabaseHealthIndicator implements HealthIndicator {\n    @Override\n    public Health health() {\n        if (isDatabaseUp()) return Health.up().withDetail(\"db\", \"MySQL\").build();\n        return Health.down().withDetail(\"error\", \"Cannot connect\").build();\n    }\n}\n```"""},
+    {"category": "spring-boot", "title": "Spring Data JPA Specifications for Dynamic Queries", "content": """## JPA Specifications\n\nBuild dynamic queries without writing SQL.\n\n```java\npublic class ProductSpecifications {\n    public static Specification<Product> hasCategory(String category) {\n        return (root, query, cb) -> cb.equal(root.get(\"category\"), category);\n    }\n    \n    public static Specification<Product> priceBetween(double min, double max) {\n        return (root, query, cb) -> cb.between(root.get(\"price\"), min, max);\n    }\n    \n    public static Specification<Product> nameContains(String keyword) {\n        return (root, query, cb) -> cb.like(root.get(\"name\"), \"%\" + keyword + \"%\");\n    }\n}\n\n// Usage: combine dynamically\n@GetMapping(\"/products/search\")\npublic List<Product> search(String category, Double minPrice, Double maxPrice, String keyword) {\n    Specification<Product> spec = Specification.where(null);\n    if (category != null) spec = spec.and(hasCategory(category));\n    if (minPrice != null) spec = spec.and(priceBetween(minPrice, maxPrice));\n    if (keyword != null) spec = spec.and(nameContains(keyword));\n    return productRepository.findAll(spec);\n}\n```"""},
+
+    # ============================================================
+    # REACT (25 topics)
+    # ============================================================
+    {"category": "react", "title": "useCallback vs useMemo", "content": """## useCallback vs useMemo\n\n### useCallback — Memoizes a function\n```jsx\nconst handleClick = useCallback(() => {\n  console.log(count);\n}, [count]);\n```\n\n### useMemo — Memoizes a computed value\n```jsx\nconst filtered = useMemo(() => {\n  return items.filter(i => i.price > 100).sort((a,b) => b.price - a.price);\n}, [items]);\n```\n\n**Rule**: Only use when you measure a performance issue. Don't optimize prematurely."""},
+    {"category": "react", "title": "Custom Hooks - Extracting Reusable Logic", "content": """## Custom Hooks\n\n```jsx\nfunction useLocalStorage(key, initialValue) {\n  const [value, setValue] = useState(() => {\n    const item = localStorage.getItem(key);\n    return item ? JSON.parse(item) : initialValue;\n  });\n  \n  const setStoredValue = (newValue) => {\n    setValue(newValue);\n    localStorage.setItem(key, JSON.stringify(newValue));\n  };\n  \n  return [value, setStoredValue];\n}\n\n// Usage\nconst [theme, setTheme] = useLocalStorage('theme', 'dark');\n```\n\n### Rules\n1. Name must start with `use`\n2. Can call other hooks inside\n3. Each component call gets isolated state"""},
+    {"category": "react", "title": "React Context API vs Redux", "content": """## Context vs Redux\n\n### Context — Built-in, simple\n```jsx\nconst ThemeContext = createContext('light');\n\nfunction App() {\n  const [theme, setTheme] = useState('dark');\n  return (\n    <ThemeContext.Provider value={{ theme, setTheme }}>\n      <Dashboard />\n    </ThemeContext.Provider>\n  );\n}\n```\n\n### When Context is Enough\n- Theme, locale, auth\n- Data that changes infrequently\n- Small-medium apps\n\n### When to Use Redux\n- Complex state with many updates\n- Need middleware (async, logging)\n- Large apps with multiple devs\n\n> Start with Context + useReducer. Migrate to Redux only when needed."""},
+    {"category": "react", "title": "React useEffect Cleanup Functions", "content": """## useEffect Cleanup\n\nPrevent memory leaks by cleaning up side effects.\n\n```jsx\nuseEffect(() => {\n  const controller = new AbortController();\n  \n  fetch('/api/data', { signal: controller.signal })\n    .then(res => res.json())\n    .then(setData)\n    .catch(err => {\n      if (err.name !== 'AbortError') console.error(err);\n    });\n  \n  // Cleanup: cancel fetch if component unmounts\n  return () => controller.abort();\n}, []);\n\n// Event listeners\nuseEffect(() => {\n  const handler = (e) => setScrollY(window.scrollY);\n  window.addEventListener('scroll', handler);\n  return () => window.removeEventListener('scroll', handler);\n}, []);\n\n// Timers\nuseEffect(() => {\n  const id = setInterval(() => tick(), 1000);\n  return () => clearInterval(id);\n}, []);\n```"""},
+    {"category": "react", "title": "React Error Boundaries", "content": """## Error Boundaries\n\nCatch JavaScript errors in child components.\n\n```jsx\nclass ErrorBoundary extends React.Component {\n  state = { hasError: false, error: null };\n  \n  static getDerivedStateFromError(error) {\n    return { hasError: true, error };\n  }\n  \n  componentDidCatch(error, errorInfo) {\n    logErrorToService(error, errorInfo);\n  }\n  \n  render() {\n    if (this.state.hasError) {\n      return (\n        <div className=\"error-fallback\">\n          <h2>Something went wrong</h2>\n          <button onClick={() => this.setState({ hasError: false })}>\n            Try Again\n          </button>\n        </div>\n      );\n    }\n    return this.props.children;\n  }\n}\n\n// Usage\n<ErrorBoundary>\n  <UserProfile />\n</ErrorBoundary>\n```\n\n**Note**: Error boundaries don't catch errors in event handlers or async code."""},
+    {"category": "react", "title": "React Performance - React.memo and when to use it", "content": """## React.memo\n\nPrevents unnecessary re-renders by memoizing component output.\n\n```jsx\n// Without memo: re-renders every time parent renders\nconst ExpensiveList = ({ items }) => {\n  return items.map(item => <Item key={item.id} data={item} />);\n};\n\n// With memo: only re-renders when props change\nconst ExpensiveList = React.memo(({ items }) => {\n  return items.map(item => <Item key={item.id} data={item} />);\n});\n\n// Custom comparison\nconst Chart = React.memo(({ data, theme }) => {\n  return <canvas />;\n}, (prevProps, nextProps) => {\n  // Return true to skip re-render\n  return prevProps.data.length === nextProps.data.length;\n});\n```\n\n### When to Use\n- Component renders often with same props\n- Component is expensive to render\n- Component is deep in the tree"""},
+    {"category": "react", "title": "React useReducer for Complex State", "content": """## useReducer\n\nBetter than useState for complex state logic.\n\n```jsx\nconst initialState = { items: [], total: 0, loading: false };\n\nfunction cartReducer(state, action) {\n  switch (action.type) {\n    case 'ADD_ITEM':\n      return {\n        ...state,\n        items: [...state.items, action.payload],\n        total: state.total + action.payload.price\n      };\n    case 'REMOVE_ITEM':\n      const item = state.items.find(i => i.id === action.payload);\n      return {\n        ...state,\n        items: state.items.filter(i => i.id !== action.payload),\n        total: state.total - item.price\n      };\n    case 'CLEAR':\n      return initialState;\n    default:\n      return state;\n  }\n}\n\nfunction Cart() {\n  const [state, dispatch] = useReducer(cartReducer, initialState);\n  return (\n    <button onClick={() => dispatch({ type: 'ADD_ITEM', payload: product })}>\n      Add to Cart ({state.items.length})\n    </button>\n  );\n}\n```"""},
+    {"category": "react", "title": "React Router v6 Essentials", "content": """## React Router v6\n\n```jsx\nimport { BrowserRouter, Routes, Route, Link, useParams, Navigate } from 'react-router-dom';\n\nfunction App() {\n  return (\n    <BrowserRouter>\n      <nav>\n        <Link to=\"/\">Home</Link>\n        <Link to=\"/products\">Products</Link>\n      </nav>\n      <Routes>\n        <Route path=\"/\" element={<Home />} />\n        <Route path=\"/products\" element={<Products />} />\n        <Route path=\"/products/:id\" element={<ProductDetail />} />\n        <Route path=\"/admin\" element={\n          isAuth ? <Admin /> : <Navigate to=\"/login\" />\n        } />\n        <Route path=\"*\" element={<NotFound />} />\n      </Routes>\n    </BrowserRouter>\n  );\n}\n\nfunction ProductDetail() {\n  const { id } = useParams();\n  const navigate = useNavigate();\n  return <button onClick={() => navigate(-1)}>Go Back</button>;\n}\n```"""},
+
+    # ============================================================
+    # JAVASCRIPT (25 topics)
+    # ============================================================
+    {"category": "javascript", "title": "Promise.all vs allSettled vs race", "content": """## Promise Combinators\n\n### Promise.all — Fails fast\n```javascript\nconst [users, posts] = await Promise.all([\n  fetch('/api/users').then(r => r.json()),\n  fetch('/api/posts').then(r => r.json()),\n]);\n```\n\n### Promise.allSettled — Never fails\n```javascript\nconst results = await Promise.allSettled([fetch('/a'), fetch('/b')]);\nresults.forEach(r => {\n  if (r.status === 'fulfilled') console.log(r.value);\n  else console.error(r.reason);\n});\n```\n\n### Promise.race — First one wins\n```javascript\nconst result = await Promise.race([\n  fetch('/api/data'),\n  new Promise((_, reject) => setTimeout(() => reject('Timeout'), 5000))\n]);\n```"""},
+    {"category": "javascript", "title": "Debounce vs Throttle", "content": """## Debounce vs Throttle\n\n### Debounce — Wait for silence\n```javascript\nfunction debounce(fn, delay) {\n  let timer;\n  return (...args) => {\n    clearTimeout(timer);\n    timer = setTimeout(() => fn(...args), delay);\n  };\n}\nsearchInput.addEventListener('input', debounce(fetchResults, 300));\n```\n\n### Throttle — Fire at intervals\n```javascript\nfunction throttle(fn, limit) {\n  let inThrottle = false;\n  return (...args) => {\n    if (!inThrottle) {\n      fn(...args);\n      inThrottle = true;\n      setTimeout(() => (inThrottle = false), limit);\n    }\n  };\n}\nwindow.addEventListener('scroll', throttle(updatePosition, 200));\n```\n\n| | Debounce | Throttle |\n|:---|:---|:---|\n| Fires | After inactivity | At regular intervals |\n| Best for | Search, resize | Scroll, mousemove |"""},
+    {"category": "javascript", "title": "Event Loop Explained", "content": """## The Event Loop\n\n```javascript\nconsole.log('1');                    // Sync\nsetTimeout(() => console.log('2'), 0); // Macro task\nPromise.resolve().then(() => console.log('3')); // Micro task\nconsole.log('4');                    // Sync\n\n// Output: 1, 4, 3, 2\n```\n\n### Execution Order\n1. **Call Stack** — Synchronous code\n2. **Microtask Queue** — Promises, queueMicrotask\n3. **Macrotask Queue** — setTimeout, setInterval, I/O\n\nMicrotasks always run before macrotasks, even with 0ms delay."""},
+    {"category": "javascript", "title": "JavaScript Closures in Practice", "content": """## Closures\n\nA function that remembers variables from its outer scope.\n\n```javascript\nfunction createCounter() {\n  let count = 0; // Enclosed variable\n  return {\n    increment: () => ++count,\n    decrement: () => --count,\n    getCount: () => count\n  };\n}\n\nconst counter = createCounter();\ncounter.increment(); // 1\ncounter.increment(); // 2\ncounter.getCount();  // 2\n```\n\n### Common Pitfall: Loop Variable\n```javascript\n// Bug: all callbacks log 3\nfor (var i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 100);\n}\n\n// Fix 1: use let (block scoped)\nfor (let i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 100); // 0, 1, 2\n}\n\n// Fix 2: IIFE closure\nfor (var i = 0; i < 3; i++) {\n  ((j) => setTimeout(() => console.log(j), 100))(i);\n}\n```"""},
+    {"category": "javascript", "title": "Destructuring and Spread Operator", "content": """## Destructuring\n\n```javascript\n// Object destructuring\nconst { name, age, address: { city } } = user;\n\n// Array destructuring\nconst [first, second, ...rest] = [1, 2, 3, 4, 5];\n// first=1, second=2, rest=[3,4,5]\n\n// Default values\nconst { role = 'user', theme = 'dark' } = settings;\n\n// Rename\nconst { name: userName, id: userId } = response;\n```\n\n### Spread Operator\n```javascript\n// Clone object (shallow)\nconst clone = { ...original, name: 'updated' };\n\n// Merge objects\nconst merged = { ...defaults, ...userPrefs };\n\n// Clone array\nconst copy = [...originalArray, newItem];\n\n// Function arguments\nconst nums = [1, 2, 3];\nMath.max(...nums); // 3\n```"""},
+    {"category": "javascript", "title": "Async Await Error Handling Patterns", "content": """## Async/Await Error Handling\n\n### Pattern 1: Try-Catch\n```javascript\nasync function fetchUser(id) {\n  try {\n    const response = await fetch(`/api/users/${id}`);\n    if (!response.ok) throw new Error(`HTTP ${response.status}`);\n    return await response.json();\n  } catch (error) {\n    console.error('Failed to fetch user:', error);\n    return null;\n  }\n}\n```\n\n### Pattern 2: Wrapper Function\n```javascript\nasync function to(promise) {\n  try {\n    const data = await promise;\n    return [null, data];\n  } catch (error) {\n    return [error, null];\n  }\n}\n\n// Usage — Go-style error handling\nconst [error, user] = await to(fetchUser(1));\nif (error) return handleError(error);\nconsole.log(user);\n```"""},
+    {"category": "javascript", "title": "JavaScript Map Set and WeakMap", "content": """## Map, Set, WeakMap\n\n### Map — Better than Object for key-value\n```javascript\nconst map = new Map();\nmap.set('name', 'Dipak');\nmap.set(42, 'number key');    // Any type as key!\nmap.set(userObj, 'object key');\n\nmap.get('name');   // 'Dipak'\nmap.has(42);       // true\nmap.size;          // 3\nmap.delete(42);\n\nfor (const [key, value] of map) { /* iterate */ }\n```\n\n### Set — Unique values only\n```javascript\nconst set = new Set([1, 2, 3, 2, 1]);\nconsole.log([...set]); // [1, 2, 3]\n\n// Remove duplicates from array\nconst unique = [...new Set(array)];\n```\n\n### WeakMap — Garbage-collectible keys\n```javascript\nconst cache = new WeakMap();\n// Keys must be objects, auto-removed when object is GC'd\ncache.set(element, computedValue);\n```"""},
+    {"category": "javascript", "title": "ES6 Modules import and export", "content": """## ES6 Modules\n\n### Named Exports\n```javascript\n// utils.js\nexport const PI = 3.14159;\nexport function add(a, b) { return a + b; }\nexport class Calculator { /* ... */ }\n\n// main.js\nimport { PI, add, Calculator } from './utils.js';\nimport { add as sum } from './utils.js'; // Rename\nimport * as Utils from './utils.js';     // Import all\n```\n\n### Default Export\n```javascript\n// UserService.js\nexport default class UserService {\n  getUser(id) { /* ... */ }\n}\n\n// main.js\nimport UserService from './UserService.js'; // Any name works\n```\n\n### Dynamic Import (Code Splitting)\n```javascript\nconst module = await import('./heavyModule.js');\nmodule.doSomething();\n```"""},
+
+    # ============================================================
+    # SYSTEM DESIGN (20 topics)
+    # ============================================================
+    {"category": "system-design", "title": "CAP Theorem Explained", "content": """## CAP Theorem\n\nIn a distributed system, you can guarantee only **2 of 3**:\n- **C**onsistency — Every read gets the latest write\n- **A**vailability — Every request gets a response\n- **P**artition Tolerance — Works despite network failures\n\n| Database | Type | Trade-off |\n|:---|:---|:---|\n| MySQL, PostgreSQL | CP | Consistent but may become unavailable |\n| Cassandra, DynamoDB | AP | Available but may serve stale data |\n| MongoDB | CP | Defaults to consistency |\n\n### Practical Rule\n- **Banking** → CP (consistency matters)\n- **Social Media** → AP (availability matters)"""},
+    {"category": "system-design", "title": "Database Indexing Internals", "content": """## How Indexing Works\n\n```sql\n-- Without index: O(n) full table scan\nSELECT * FROM users WHERE email = 'john@example.com';\n\n-- Create index: O(log n) B-Tree lookup\nCREATE INDEX idx_email ON users(email);\n```\n\n### When Indexes Help\n- WHERE, JOIN, ORDER BY, GROUP BY\n\n### When Indexes Hurt\n- Heavy INSERT/UPDATE/DELETE tables\n- Small tables\n- Low cardinality columns (boolean)\n\n### Composite Index\n```sql\n-- Index on (A, B, C)\n-- WHERE A = ?            works\n-- WHERE A = ? AND B = ?  works\n-- WHERE B = ?            does NOT work (leftmost prefix rule!)\n```"""},
+    {"category": "system-design", "title": "Rate Limiting Strategies", "content": """## Rate Limiting\n\n### Token Bucket Algorithm\n```\nBucket: 10 tokens, refill 1/second\nRequest → tokens > 0 ? Allow (remove 1) : Reject (429)\n```\n\n### Spring Boot Implementation\n```java\n@Component\npublic class RateLimitFilter extends OncePerRequestFilter {\n    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();\n    \n    @Override\n    protected void doFilterInternal(HttpServletRequest req,\n            HttpServletResponse res, FilterChain chain) {\n        String ip = req.getRemoteAddr();\n        Bucket bucket = buckets.computeIfAbsent(ip, k -> \n            Bucket.builder().addLimit(\n                Bandwidth.classic(10, Refill.greedy(10, Duration.ofMinutes(1)))\n            ).build());\n        \n        if (bucket.tryConsume(1)) chain.doFilter(req, res);\n        else { res.setStatus(429); }\n    }\n}\n```"""},
+    {"category": "system-design", "title": "Load Balancing Strategies", "content": """## Load Balancing\n\n### Algorithms\n| Strategy | How It Works | Best For |\n|:---|:---|:---|\n| Round Robin | Rotate through servers sequentially | Equal server capacity |\n| Weighted Round Robin | More requests to stronger servers | Mixed server specs |\n| Least Connections | Send to server with fewest active connections | Variable request duration |\n| IP Hash | Same client always hits same server | Session affinity needed |\n| Random | Random server selection | Simple, stateless |\n\n### Layer 4 vs Layer 7\n- **L4** (TCP): Faster, routes based on IP/port\n- **L7** (HTTP): Smarter, can route based on URL, headers, cookies\n\n### Health Checks\n```nginx\nupstream backend {\n    server server1:8080 max_fails=3 fail_timeout=30s;\n    server server2:8080 max_fails=3 fail_timeout=30s;\n    server server3:8080 backup;  # Only used if others fail\n}\n```"""},
+    {"category": "system-design", "title": "Caching Strategies - When to Use What", "content": """## Caching Strategies\n\n### Cache-Aside (Lazy Loading)\n```\n1. App checks cache\n2. Cache miss → read from DB\n3. Write result to cache\n4. Return data\n```\nBest for: Read-heavy workloads\n\n### Write-Through\n```\n1. App writes to cache\n2. Cache writes to DB (synchronous)\n3. Return success\n```\nBest for: Data consistency required\n\n### Write-Behind (Write-Back)\n```\n1. App writes to cache\n2. Cache writes to DB later (async)\n3. Return success immediately\n```\nBest for: Write-heavy, eventual consistency OK\n\n### Cache Invalidation\n| Strategy | Approach |\n|:---|:---|\n| TTL | Auto-expire after time |\n| Event-based | Invalidate on data change |\n| Version-based | Cache with version, compare |"""},
+    {"category": "system-design", "title": "Microservices vs Monolith", "content": """## Microservices vs Monolith\n\n| Aspect | Monolith | Microservices |\n|:---|:---|:---|\n| Deployment | Single unit | Independent services |\n| Scaling | Scale entire app | Scale per service |\n| Complexity | Simple initially | Complex infrastructure |\n| Team size | Small team | Multiple teams |\n| Data | Shared database | Database per service |\n| Communication | Function calls | HTTP/gRPC/Message queue |\n\n### When to Choose Monolith\n- Small team (< 5 devs)\n- MVP / early stage startup\n- Simple domain\n\n### When to Choose Microservices\n- Large team with clear domain boundaries\n- Need independent scaling\n- Different tech stacks per service\n\n### Start Monolith, Extract Later\n> \"Don't start with microservices. Start with a modular monolith and extract services when you have clear boundaries.\" """},
+    {"category": "system-design", "title": "Message Queues - Kafka vs RabbitMQ", "content": """## Message Queues\n\n### When to Use\n- Decouple services\n- Handle traffic spikes\n- Async processing (emails, notifications)\n- Event-driven architecture\n\n### Kafka vs RabbitMQ\n| Feature | Kafka | RabbitMQ |\n|:---|:---|:---|\n| Model | Distributed log | Message broker |\n| Throughput | Very high (millions/sec) | Moderate (thousands/sec) |\n| Message retention | Configurable (days/weeks) | Until consumed |\n| Ordering | Per partition | Per queue |\n| Best for | Event streaming, logs | Task queues, RPC |\n\n### Basic Kafka Producer\n```java\n@Service\npublic class OrderEventProducer {\n    @Autowired\n    private KafkaTemplate<String, OrderEvent> kafka;\n    \n    public void publish(OrderEvent event) {\n        kafka.send(\"order-events\", event.getOrderId(), event);\n    }\n}\n```"""},
+    {"category": "system-design", "title": "API Design Best Practices", "content": """## REST API Design\n\n### URL Convention\n```\nGET    /api/v1/users          — List users\nGET    /api/v1/users/123      — Get user 123\nPOST   /api/v1/users          — Create user\nPUT    /api/v1/users/123      — Update user 123\nDELETE /api/v1/users/123      — Delete user 123\nGET    /api/v1/users/123/orders — Get orders for user 123\n```\n\n### Response Format\n```json\n{\n  \"status\": \"success\",\n  \"data\": { \"id\": 123, \"name\": \"Dipak\" },\n  \"message\": null,\n  \"timestamp\": \"2025-01-01T00:00:00Z\"\n}\n```\n\n### Rules\n1. Use **nouns** not verbs (`/users` not `/getUsers`)\n2. Use **plural** names (`/users` not `/user`)\n3. Version your API (`/v1/`, `/v2/`)\n4. Use proper HTTP status codes\n5. Support pagination, filtering, sorting"""},
+
+    # ============================================================
+    # DSA (30 topics)
+    # ============================================================
+    {"category": "dsa", "title": "Two Pointer Technique", "content": """## Two Pointers\n\nReduces O(n²) to O(n) for array problems.\n\n### Opposite Ends\n```java\npublic int[] twoSum(int[] nums, int target) {\n    int left = 0, right = nums.length - 1;\n    while (left < right) {\n        int sum = nums[left] + nums[right];\n        if (sum == target) return new int[]{left, right};\n        else if (sum < target) left++;\n        else right--;\n    }\n    return new int[]{-1, -1};\n}\n```\n\n### Same Direction (Fast & Slow)\n```java\npublic int removeDuplicates(int[] nums) {\n    int slow = 0;\n    for (int fast = 1; fast < nums.length; fast++) {\n        if (nums[fast] != nums[slow]) nums[++slow] = nums[fast];\n    }\n    return slow + 1;\n}\n```"""},
+    {"category": "dsa", "title": "Sliding Window Pattern", "content": """## Sliding Window\n\n### Fixed Window: Max sum of k elements\n```java\npublic int maxSum(int[] arr, int k) {\n    int sum = 0, max = 0;\n    for (int i = 0; i < arr.length; i++) {\n        sum += arr[i];\n        if (i >= k) sum -= arr[i - k];\n        if (i >= k - 1) max = Math.max(max, sum);\n    }\n    return max;\n}\n```\n\n### Variable Window: Longest substring without repeating\n```java\npublic int lengthOfLongestSubstring(String s) {\n    Set<Character> set = new HashSet<>();\n    int left = 0, max = 0;\n    for (int right = 0; right < s.length(); right++) {\n        while (set.contains(s.charAt(right))) set.remove(s.charAt(left++));\n        set.add(s.charAt(right));\n        max = Math.max(max, right - left + 1);\n    }\n    return max;\n}\n```"""},
+    {"category": "dsa", "title": "Binary Search on Answer Space", "content": """## Binary Search Beyond Arrays\n\n```java\npublic int shipWithinDays(int[] weights, int days) {\n    int lo = Arrays.stream(weights).max().getAsInt();\n    int hi = Arrays.stream(weights).sum();\n    while (lo < hi) {\n        int mid = lo + (hi - lo) / 2;\n        if (canShip(weights, days, mid)) hi = mid;\n        else lo = mid + 1;\n    }\n    return lo;\n}\n\nprivate boolean canShip(int[] w, int days, int cap) {\n    int load = 0, d = 1;\n    for (int x : w) {\n        if (load + x > cap) { d++; load = 0; }\n        load += x;\n    }\n    return d <= days;\n}\n```\n\n**Pattern**: \"Find minimum/maximum that satisfies a condition\" → Binary Search on Answer."""},
+    {"category": "dsa", "title": "BFS vs DFS - When to Use Which", "content": """## BFS vs DFS\n\n### BFS — Level by level (Queue)\n```java\npublic List<List<Integer>> levelOrder(TreeNode root) {\n    List<List<Integer>> result = new ArrayList<>();\n    Queue<TreeNode> queue = new LinkedList<>();\n    queue.offer(root);\n    while (!queue.isEmpty()) {\n        int size = queue.size();\n        List<Integer> level = new ArrayList<>();\n        for (int i = 0; i < size; i++) {\n            TreeNode node = queue.poll();\n            level.add(node.val);\n            if (node.left != null) queue.offer(node.left);\n            if (node.right != null) queue.offer(node.right);\n        }\n        result.add(level);\n    }\n    return result;\n}\n```\n\n| | BFS | DFS |\n|:---|:---|:---|\n| Data Structure | Queue | Stack/Recursion |\n| Best for | Shortest path, level-order | Path finding, backtracking |\n| Memory | O(width) | O(height) |"""},
+    {"category": "dsa", "title": "Dynamic Programming - Top Down vs Bottom Up", "content": """## Dynamic Programming\n\n### Top-Down (Memoization)\n```java\nint[] memo = new int[n + 1];\nArrays.fill(memo, -1);\n\npublic int fib(int n) {\n    if (n <= 1) return n;\n    if (memo[n] != -1) return memo[n];\n    return memo[n] = fib(n-1) + fib(n-2);\n}\n```\n\n### Bottom-Up (Tabulation)\n```java\npublic int fib(int n) {\n    int[] dp = new int[n + 1];\n    dp[0] = 0; dp[1] = 1;\n    for (int i = 2; i <= n; i++)\n        dp[i] = dp[i-1] + dp[i-2];\n    return dp[n];\n}\n\n// Space optimized\npublic int fib(int n) {\n    int prev2 = 0, prev1 = 1;\n    for (int i = 2; i <= n; i++) {\n        int curr = prev1 + prev2;\n        prev2 = prev1;\n        prev1 = curr;\n    }\n    return prev1;\n}\n```\n\n**Steps**: 1. Define state → 2. Recurrence relation → 3. Base case → 4. Optimize space"""},
+    {"category": "dsa", "title": "Stack Problems - Next Greater Element", "content": """## Monotonic Stack\n\nFind the next greater element for each element in O(n).\n\n```java\npublic int[] nextGreaterElement(int[] nums) {\n    int n = nums.length;\n    int[] result = new int[n];\n    Arrays.fill(result, -1);\n    Deque<Integer> stack = new ArrayDeque<>(); // stores indices\n    \n    for (int i = 0; i < n; i++) {\n        while (!stack.isEmpty() && nums[stack.peek()] < nums[i]) {\n            result[stack.pop()] = nums[i];\n        }\n        stack.push(i);\n    }\n    return result;\n}\n\n// Input:  [2, 1, 2, 4, 3]\n// Output: [4, 2, 4, -1, -1]\n```\n\n### Variations\n- Next Smaller Element: change `<` to `>`\n- Previous Greater: iterate right to left\n- Circular array: iterate `2*n` with `i % n`"""},
+    {"category": "dsa", "title": "Graph - Topological Sort", "content": """## Topological Sort (Kahn's Algorithm)\n\nOrdering of vertices in a DAG where every edge u→v has u before v.\n\n```java\npublic int[] topologicalSort(int n, int[][] edges) {\n    List<List<Integer>> adj = new ArrayList<>();\n    int[] inDegree = new int[n];\n    \n    for (int i = 0; i < n; i++) adj.add(new ArrayList<>());\n    for (int[] e : edges) {\n        adj.get(e[0]).add(e[1]);\n        inDegree[e[1]]++;\n    }\n    \n    Queue<Integer> queue = new LinkedList<>();\n    for (int i = 0; i < n; i++)\n        if (inDegree[i] == 0) queue.offer(i);\n    \n    int[] result = new int[n];\n    int idx = 0;\n    while (!queue.isEmpty()) {\n        int node = queue.poll();\n        result[idx++] = node;\n        for (int neighbor : adj.get(node))\n            if (--inDegree[neighbor] == 0) queue.offer(neighbor);\n    }\n    return idx == n ? result : new int[0]; // empty = cycle exists\n}\n```\n\n**Use cases**: Course scheduling, build systems, task dependencies."""},
+    {"category": "dsa", "title": "Heap and Priority Queue Applications", "content": """## PriorityQueue\n\n### Kth Largest Element\n```java\npublic int findKthLargest(int[] nums, int k) {\n    PriorityQueue<Integer> minHeap = new PriorityQueue<>();\n    for (int num : nums) {\n        minHeap.offer(num);\n        if (minHeap.size() > k) minHeap.poll();\n    }\n    return minHeap.peek(); // kth largest\n}\n```\n\n### Merge K Sorted Lists\n```java\npublic ListNode mergeKLists(ListNode[] lists) {\n    PriorityQueue<ListNode> pq = new PriorityQueue<>(\n        (a, b) -> a.val - b.val);\n    for (ListNode l : lists)\n        if (l != null) pq.offer(l);\n    \n    ListNode dummy = new ListNode(0), curr = dummy;\n    while (!pq.isEmpty()) {\n        ListNode node = pq.poll();\n        curr.next = node;\n        curr = curr.next;\n        if (node.next != null) pq.offer(node.next);\n    }\n    return dummy.next;\n}\n```\n\n**Time**: O(n log k) where k = number of lists."""},
+    {"category": "dsa", "title": "Trie Data Structure", "content": """## Trie (Prefix Tree)\n\nEfficient for string search, autocomplete, and spell check.\n\n```java\nclass TrieNode {\n    TrieNode[] children = new TrieNode[26];\n    boolean isEnd = false;\n}\n\nclass Trie {\n    TrieNode root = new TrieNode();\n    \n    public void insert(String word) {\n        TrieNode node = root;\n        for (char c : word.toCharArray()) {\n            int idx = c - 'a';\n            if (node.children[idx] == null)\n                node.children[idx] = new TrieNode();\n            node = node.children[idx];\n        }\n        node.isEnd = true;\n    }\n    \n    public boolean search(String word) {\n        TrieNode node = find(word);\n        return node != null && node.isEnd;\n    }\n    \n    public boolean startsWith(String prefix) {\n        return find(prefix) != null;\n    }\n    \n    private TrieNode find(String s) {\n        TrieNode node = root;\n        for (char c : s.toCharArray()) {\n            node = node.children[c - 'a'];\n            if (node == null) return null;\n        }\n        return node;\n    }\n}\n```"""},
+    {"category": "dsa", "title": "Union Find - Disjoint Set Union", "content": """## Union-Find (DSU)\n\nTrack connected components efficiently.\n\n```java\nclass UnionFind {\n    int[] parent, rank;\n    int components;\n    \n    UnionFind(int n) {\n        parent = new int[n];\n        rank = new int[n];\n        components = n;\n        for (int i = 0; i < n; i++) parent[i] = i;\n    }\n    \n    int find(int x) {\n        if (parent[x] != x)\n            parent[x] = find(parent[x]); // Path compression\n        return parent[x];\n    }\n    \n    boolean union(int x, int y) {\n        int px = find(x), py = find(y);\n        if (px == py) return false; // Already connected\n        if (rank[px] < rank[py]) { int t = px; px = py; py = t; }\n        parent[py] = px;\n        if (rank[px] == rank[py]) rank[px]++;\n        components--;\n        return true;\n    }\n}\n```\n\n**Use cases**: Number of islands, cycle detection, Kruskal's MST, network connectivity.\n**Time**: Nearly O(1) per operation with path compression + union by rank."""},
+
+    # ============================================================
+    # .NET / C# (20 topics)
+    # ============================================================
+    {"category": "dotnet", "title": "Dependency Injection in ASP.NET Core", "content": """## DI in ASP.NET Core\n\n```csharp\n// Registration\nbuilder.Services.AddTransient<IEmailService, EmailService>();  // New each time\nbuilder.Services.AddScoped<IOrderService, OrderService>();     // Per request\nbuilder.Services.AddSingleton<ICacheService, CacheService>();  // App lifetime\n\n// Constructor Injection\n[ApiController]\npublic class OrdersController : ControllerBase\n{\n    private readonly IOrderService _orderService;\n    public OrdersController(IOrderService orderService)\n    {\n        _orderService = orderService;\n    }\n}\n```\n\n| Lifetime | Use Case |\n|:---|:---|\n| Transient | Lightweight, stateless |\n| Scoped | DB contexts, per-request |\n| Singleton | Caching, config, HTTP clients |"""},
+    {"category": "dotnet", "title": "EF Core Loading Strategies", "content": """## Eager vs Lazy vs Explicit Loading\n\n### Eager\n```csharp\nvar orders = await context.Orders\n    .Include(o => o.Customer)\n    .Include(o => o.Items).ThenInclude(i => i.Product)\n    .ToListAsync();\n```\n\n### Lazy (be careful)\n```csharp\nvar order = await context.Orders.FindAsync(1);\nvar customer = order.Customer; // DB query HERE\n```\n\n### Explicit\n```csharp\nvar order = await context.Orders.FindAsync(1);\nawait context.Entry(order).Reference(o => o.Customer).LoadAsync();\n```\n\n| Strategy | Pro | Con |\n|:---|:---|:---|\n| Eager | Predictable | May over-fetch |\n| Lazy | Simple | N+1 problem |\n| Explicit | Full control | Verbose |\n\n**Best Practice**: Default to Eager Loading."""},
+    {"category": "dotnet", "title": "LINQ Essentials in C#", "content": """## LINQ\n\n```csharp\nvar students = new List<Student>();\n\n// Filter + Transform\nvar topStudents = students\n    .Where(s => s.GPA > 3.5)\n    .OrderByDescending(s => s.GPA)\n    .Select(s => new { s.Name, s.GPA })\n    .Take(10)\n    .ToList();\n\n// Grouping\nvar byDept = students\n    .GroupBy(s => s.Department)\n    .Select(g => new { Dept = g.Key, Count = g.Count(), AvgGPA = g.Average(s => s.GPA) });\n\n// Aggregation\nint total = numbers.Sum();\ndouble avg = numbers.Average();\nint max = numbers.Max();\n\n// First, Single, Any, All\nvar first = students.FirstOrDefault(s => s.Id == 1);\nbool hasHonors = students.Any(s => s.GPA > 3.8);\n```"""},
+    {"category": "dotnet", "title": "Async Await in C#", "content": """## Async/Await\n\n```csharp\npublic async Task<User> GetUserAsync(int id)\n{\n    var user = await _context.Users.FindAsync(id);\n    if (user == null) throw new NotFoundException($\"User {id} not found\");\n    return user;\n}\n\n// Parallel async calls\npublic async Task<Dashboard> GetDashboardAsync(int userId)\n{\n    var userTask = GetUserAsync(userId);\n    var ordersTask = GetOrdersAsync(userId);\n    var statsTask = GetStatsAsync(userId);\n    \n    await Task.WhenAll(userTask, ordersTask, statsTask);\n    \n    return new Dashboard(userTask.Result, ordersTask.Result, statsTask.Result);\n}\n```\n\n### Rules\n1. Never use `.Result` or `.Wait()` — causes deadlocks\n2. Use `async Task` not `async void` (except event handlers)\n3. Use `ConfigureAwait(false)` in library code"""},
+    {"category": "dotnet", "title": "C# Pattern Matching", "content": """## Pattern Matching (C# 9+)\n\n```csharp\n// Type pattern\nstring Describe(object obj) => obj switch\n{\n    int i when i > 0 => $\"Positive int: {i}\",\n    int i => $\"Non-positive int: {i}\",\n    string s => $\"String of length {s.Length}\",\n    null => \"null\",\n    _ => $\"Unknown: {obj.GetType()}\"\n};\n\n// Property pattern\nstring GetDiscount(Customer c) => c switch\n{\n    { Tier: \"Gold\", Years: > 5 } => \"30% off\",\n    { Tier: \"Gold\" } => \"20% off\",\n    { Tier: \"Silver\" } => \"10% off\",\n    _ => \"No discount\"\n};\n\n// Relational + logical patterns\nstring Classify(int temp) => temp switch\n{\n    < 0 => \"Freezing\",\n    >= 0 and < 20 => \"Cold\",\n    >= 20 and < 35 => \"Warm\",\n    >= 35 => \"Hot\"\n};\n```"""},
+    {"category": "dotnet", "title": "Middleware in ASP.NET Core", "content": """## Middleware Pipeline\n\n```csharp\nvar app = builder.Build();\n\n// Order matters! Executes top to bottom\napp.UseExceptionHandler(\"/error\");  // 1. Global error handling\napp.UseHttpsRedirection();           // 2. Force HTTPS\napp.UseCors();                       // 3. CORS\napp.UseAuthentication();             // 4. Who are you?\napp.UseAuthorization();              // 5. What can you do?\napp.MapControllers();                // 6. Route to controller\n\n// Custom middleware\napp.Use(async (context, next) =>\n{\n    var start = DateTime.UtcNow;\n    await next();\n    var duration = DateTime.UtcNow - start;\n    context.Response.Headers.Add(\"X-Response-Time\", $\"{duration.TotalMilliseconds}ms\");\n});\n```\n\n### Custom Middleware Class\n```csharp\npublic class RequestLoggingMiddleware\n{\n    private readonly RequestDelegate _next;\n    public RequestLoggingMiddleware(RequestDelegate next) { _next = next; }\n    \n    public async Task InvokeAsync(HttpContext context)\n    {\n        Log.Info($\"{context.Request.Method} {context.Request.Path}\");\n        await _next(context);\n    }\n}\n```"""},
+
+    # ============================================================
+    # DATABASE / MySQL (20 topics)
+    # ============================================================
+    {"category": "database", "title": "SQL JOIN Types", "content": """## SQL JOINs\n\n```sql\n-- INNER JOIN: Only matching rows\nSELECT u.name, o.total FROM users u\nINNER JOIN orders o ON u.id = o.user_id;\n\n-- LEFT JOIN: All left + matching right\nSELECT u.name, COUNT(o.id) as orders FROM users u\nLEFT JOIN orders o ON u.id = o.user_id GROUP BY u.name;\n\n-- RIGHT JOIN: All right + matching left\nSELECT u.name, o.total FROM users u\nRIGHT JOIN orders o ON u.id = o.user_id;\n```\n\n**Tip**: Always index JOIN columns:\n```sql\nCREATE INDEX idx_user_id ON orders(user_id);\n```"""},
+    {"category": "database", "title": "SQL Query Optimization", "content": """## SQL Optimization\n\n### 1. Use EXPLAIN\n```sql\nEXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'pending';\n```\n\n### 2. Avoid SELECT *\n```sql\nSELECT id, name, email FROM users; -- Only needed columns\n```\n\n### 3. EXISTS over IN\n```sql\n-- Faster\nSELECT * FROM users u WHERE EXISTS (\n    SELECT 1 FROM orders o WHERE o.user_id = u.id\n);\n```\n\n### 4. Cursor pagination over OFFSET\n```sql\n-- Slow for large offsets\nSELECT * FROM posts ORDER BY id LIMIT 20 OFFSET 20000;\n\n-- Fast: cursor-based\nSELECT * FROM posts WHERE id > 20000 ORDER BY id LIMIT 20;\n```"""},
+    {"category": "database", "title": "Database Normalization Forms", "content": """## Normalization\n\n### 1NF: Atomic values\n```\nBad:  | skills        |\n      | Java,Python   |\n\nGood: | skill  |\n      | Java   |\n      | Python |\n```\n\n### 2NF: No partial dependencies\nAll non-key columns depend on the **entire** primary key.\n\n### 3NF: No transitive dependencies\nNon-key columns don't depend on other non-key columns.\n\n```\nBad:  student_id | dept_name | dept_head\n(dept_head depends on dept_name, not student_id)\n\nGood: Split into Students(student_id, dept_name) \n      and Departments(dept_name, dept_head)\n```\n\n### When to Denormalize\n- Read-heavy systems (analytics, reporting)\n- When JOINs become too expensive\n- Caching layers"""},
+    {"category": "database", "title": "MySQL Transactions and ACID", "content": """## ACID Properties\n\n| Property | Meaning |\n|:---|:---|\n| **A**tomicity | All or nothing |\n| **C**onsistency | Valid state before and after |\n| **I**solation | Concurrent txns don't interfere |\n| **D**urability | Committed data survives crashes |\n\n### Transaction Example\n```sql\nSTART TRANSACTION;\n\nUPDATE accounts SET balance = balance - 500 WHERE id = 1;\nUPDATE accounts SET balance = balance + 500 WHERE id = 2;\n\n-- If both succeed\nCOMMIT;\n\n-- If anything fails\nROLLBACK;\n```\n\n### Isolation Levels\n| Level | Dirty Read | Non-Repeatable | Phantom |\n|:---|:---|:---|:---|\n| READ UNCOMMITTED | Yes | Yes | Yes |\n| READ COMMITTED | No | Yes | Yes |\n| REPEATABLE READ | No | No | Yes |\n| SERIALIZABLE | No | No | No |\n\nMySQL default: `REPEATABLE READ`"""},
+    {"category": "database", "title": "SQL Window Functions", "content": """## Window Functions\n\nPerform calculations across rows without grouping.\n\n```sql\n-- ROW_NUMBER: rank employees by salary per department\nSELECT name, department, salary,\n    ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as rank\nFROM employees;\n\n-- RANK vs DENSE_RANK\n-- Salary: 100, 100, 90\n-- RANK:      1,   1,  3  (skips 2)\n-- DENSE_RANK: 1,  1,  2  (no gap)\n\n-- Running total\nSELECT date, amount,\n    SUM(amount) OVER (ORDER BY date) as running_total\nFROM transactions;\n\n-- Moving average (last 7 days)\nSELECT date, amount,\n    AVG(amount) OVER (\n        ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW\n    ) as moving_avg\nFROM daily_sales;\n```"""},
+
+    # ============================================================
+    # GIT (10 topics)
+    # ============================================================
+    {"category": "git", "title": "Git Rebase vs Merge", "content": """## Rebase vs Merge\n\n### Merge: preserves history\n```bash\ngit checkout main && git merge feature\n```\n\n### Rebase: linear history\n```bash\ngit checkout feature && git rebase main\n```\n\n**Golden Rule**: Never rebase shared branches.\n\n### Interactive Rebase\n```bash\ngit rebase -i HEAD~3\n# pick abc Add user model\n# squash def Fix typo\n# pick ghi Add API\n```"""},
+    {"category": "git", "title": "Useful Git Commands", "content": """## Git Time Savers\n\n```bash\n# Undo last commit (keep changes)\ngit reset --soft HEAD~1\n\n# Stash with message\ngit stash push -m \"WIP: feature\"\ngit stash pop\n\n# Find which commit broke something\ngit bisect start\ngit bisect bad\ngit bisect good abc123\n\n# Cherry-pick a commit\ngit cherry-pick abc1234\n\n# Pretty log\ngit log --oneline --graph --all -20\n\n# Clean merged branches\ngit branch --merged | grep -v main | xargs git branch -d\n```"""},
+
+    # ============================================================
+    # DEVOPS (10 topics)
+    # ============================================================
+    {"category": "devops", "title": "Docker Multi-Stage Builds", "content": """## Multi-Stage Builds\n\n```dockerfile\n# Stage 1: Build (800MB)\nFROM maven:3.9-eclipse-temurin-17 AS builder\nWORKDIR /app\nCOPY pom.xml .\nRUN mvn dependency:resolve\nCOPY src ./src\nRUN mvn clean package -DskipTests\n\n# Stage 2: Run (200MB)\nFROM eclipse-temurin:17-jre-alpine\nWORKDIR /app\nCOPY --from=builder /app/target/*.jar app.jar\nEXPOSE 8080\nENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]\n```\n\n**Benefits**: 75% smaller image, no build tools in production, faster deployments."""},
+    {"category": "devops", "title": "Docker Compose for Development", "content": """## Docker Compose\n\n```yaml\nversion: '3.8'\nservices:\n  app:\n    build: .\n    ports:\n      - \"8080:8080\"\n    environment:\n      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/myapp\n    depends_on:\n      db:\n        condition: service_healthy\n  \n  db:\n    image: mysql:8.0\n    environment:\n      MYSQL_ROOT_PASSWORD: root\n      MYSQL_DATABASE: myapp\n    ports:\n      - \"3306:3306\"\n    volumes:\n      - mysql_data:/var/lib/mysql\n    healthcheck:\n      test: mysqladmin ping -h localhost\n      interval: 10s\n      timeout: 5s\n      retries: 5\n\nvolumes:\n  mysql_data:\n```\n\n```bash\ndocker-compose up -d    # Start\ndocker-compose logs -f  # View logs\ndocker-compose down     # Stop\n```"""},
+
+    # ============================================================
+    # MERN / Node.js / MongoDB (20 topics)
+    # ============================================================
+    {"category": "nodejs", "title": "Express Middleware Chain", "content": """## Express Middleware\n\n```javascript\n// Logging middleware\napp.use((req, res, next) => {\n  console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);\n  next(); // Pass to next middleware\n});\n\n// Auth middleware\nconst authenticate = (req, res, next) => {\n  const token = req.headers.authorization?.split(' ')[1];\n  if (!token) return res.status(401).json({ error: 'No token' });\n  try {\n    req.user = jwt.verify(token, SECRET);\n    next();\n  } catch {\n    res.status(403).json({ error: 'Invalid token' });\n  }\n};\n\n// Apply to specific routes\napp.get('/profile', authenticate, (req, res) => {\n  res.json(req.user);\n});\n\n// Error handling middleware (must have 4 params)\napp.use((err, req, res, next) => {\n  console.error(err.stack);\n  res.status(500).json({ error: 'Something went wrong' });\n});\n```"""},
+    {"category": "nodejs", "title": "Mongoose Schema Design Patterns", "content": """## Mongoose Schemas\n\n```javascript\nconst userSchema = new Schema({\n  name: { type: String, required: true, trim: true },\n  email: { type: String, required: true, unique: true, lowercase: true },\n  password: { type: String, required: true, minlength: 8, select: false },\n  role: { type: String, enum: ['user', 'admin'], default: 'user' },\n  createdAt: { type: Date, default: Date.now }\n});\n\n// Pre-save hook: hash password\nuserSchema.pre('save', async function(next) {\n  if (!this.isModified('password')) return next();\n  this.password = await bcrypt.hash(this.password, 12);\n  next();\n});\n\n// Instance method\nuserSchema.methods.comparePassword = async function(candidate) {\n  return bcrypt.compare(candidate, this.password);\n};\n\n// Virtual field\nuserSchema.virtual('displayName').get(function() {\n  return this.name.split(' ')[0];\n});\n\nconst User = mongoose.model('User', userSchema);\n```"""},
+    {"category": "nodejs", "title": "MongoDB Aggregation Pipeline", "content": """## Aggregation Pipeline\n\n```javascript\n// Sales analytics: revenue by category, sorted\nconst results = await Order.aggregate([\n  { $match: { status: 'completed', date: { $gte: startDate } } },\n  { $unwind: '$items' },\n  { $group: {\n      _id: '$items.category',\n      totalRevenue: { $sum: { $multiply: ['$items.price', '$items.qty'] } },\n      orderCount: { $sum: 1 },\n      avgOrderValue: { $avg: '$total' }\n  }},\n  { $sort: { totalRevenue: -1 } },\n  { $project: {\n      category: '$_id',\n      totalRevenue: { $round: ['$totalRevenue', 2] },\n      orderCount: 1,\n      avgOrderValue: { $round: ['$avgOrderValue', 2] },\n      _id: 0\n  }},\n  { $limit: 10 }\n]);\n```\n\n### Common Stages\n| Stage | Purpose |\n|:---|:---|\n| $match | Filter documents |\n| $group | Aggregate values |\n| $sort | Order results |\n| $project | Reshape output |\n| $lookup | JOIN with other collection |"""},
+    {"category": "nodejs", "title": "Node.js Error Handling Best Practices", "content": """## Error Handling in Node.js\n\n### Custom Error Class\n```javascript\nclass AppError extends Error {\n  constructor(message, statusCode) {\n    super(message);\n    this.statusCode = statusCode;\n    this.isOperational = true;\n    Error.captureStackTrace(this, this.constructor);\n  }\n}\n\n// Usage\nthrow new AppError('User not found', 404);\n```\n\n### Async Error Wrapper\n```javascript\nconst catchAsync = (fn) => (req, res, next) => {\n  fn(req, res, next).catch(next);\n};\n\n// No try-catch needed!\nrouter.get('/users/:id', catchAsync(async (req, res) => {\n  const user = await User.findById(req.params.id);\n  if (!user) throw new AppError('User not found', 404);\n  res.json(user);\n}));\n```\n\n### Unhandled Rejections\n```javascript\nprocess.on('unhandledRejection', (err) => {\n  console.error('UNHANDLED REJECTION:', err.message);\n  server.close(() => process.exit(1));\n});\n```"""},
+    {"category": "nodejs", "title": "Environment Variables with dotenv", "content": """## Environment Configuration\n\n```bash\n# .env file (never commit this!)\nNODE_ENV=development\nPORT=3000\nMONGODB_URI=mongodb://localhost:27017/myapp\nJWT_SECRET=super-secret-key-change-in-production\nJWT_EXPIRES_IN=7d\n```\n\n```javascript\n// config.js\nrequire('dotenv').config();\n\nmodule.exports = {\n  port: process.env.PORT || 3000,\n  mongoUri: process.env.MONGODB_URI,\n  jwt: {\n    secret: process.env.JWT_SECRET,\n    expiresIn: process.env.JWT_EXPIRES_IN\n  },\n  isProduction: process.env.NODE_ENV === 'production'\n};\n```\n\n### .gitignore\n```\nnode_modules/\n.env\n.env.local\n.env.production\n```\n\n**Rule**: Never hardcode secrets. Always use environment variables."""},
+    {"category": "mongodb", "title": "MongoDB Indexing Strategies", "content": """## MongoDB Indexes\n\n```javascript\n// Single field index\ndb.users.createIndex({ email: 1 });\n\n// Compound index (order matters!)\ndb.orders.createIndex({ userId: 1, createdAt: -1 });\n\n// Text index for search\ndb.products.createIndex({ name: 'text', description: 'text' });\ndb.products.find({ $text: { $search: 'wireless headphones' } });\n\n// TTL index: auto-delete after time\ndb.sessions.createIndex({ createdAt: 1 }, { expireAfterSeconds: 3600 });\n\n// Unique index\ndb.users.createIndex({ email: 1 }, { unique: true });\n```\n\n### Check query performance\n```javascript\ndb.orders.find({ userId: 123 }).explain('executionStats');\n// Look for: IXSCAN (good) vs COLLSCAN (bad)\n```\n\n**Rule**: Index fields used in `find()`, `sort()`, and `$match()` most often."""},
+    {"category": "mongodb", "title": "MongoDB Schema Design - Embed vs Reference", "content": """## Embed vs Reference\n\n### Embed: Data accessed together\n```javascript\n// Good: User with addresses (always fetched together)\n{\n  name: \"Dipak\",\n  addresses: [\n    { street: \"123 Main St\", city: \"Nashik\" },\n    { street: \"456 Oak Ave\", city: \"Mumbai\" }\n  ]\n}\n```\n\n### Reference: Independent entities\n```javascript\n// Good: Order references User (queried separately)\n// users collection\n{ _id: ObjectId(\"123\"), name: \"Dipak\" }\n\n// orders collection\n{ userId: ObjectId(\"123\"), total: 500, items: [...] }\n```\n\n### Decision Guide\n| Question | Embed | Reference |\n|:---|:---|:---|\n| Read together? | Yes | No |\n| Data changes often? | No | Yes |\n| Array grows unbounded? | No | Yes |\n| Need atomic updates? | Yes | No |\n\n**Rule of thumb**: If > 100 items, don't embed. If unbounded, always reference."""},
 ]
 
 COMMIT_PREFIXES = [
-    "til: ",
-    "learn: ",
-    "notes: ",
-    "study: ",
-    "docs: ",
+    "til: ", "learn: ", "notes: ", "study: ", "docs: ",
+    "ref: ", "concept: ", "explore: ",
 ]
 
 def get_today_topic(topics):
@@ -1085,46 +154,46 @@ def create_til_entry(topic):
     ist = timezone(timedelta(hours=5, minutes=30))
     today = datetime.now(ist)
     date_str = today.strftime("%Y-%m-%d")
-    
     category = topic["category"]
     title = topic["title"]
     content = topic["content"].strip()
-    
     category_dir = os.path.join(os.getcwd(), category)
     os.makedirs(category_dir, exist_ok=True)
-    
-    safe_title = title.lower().replace(" ", "-").replace("/", "-").replace("(", "").replace(")", "").replace("---", "-").replace("--", "-")
+    safe_title = title.lower()
+    for ch in [" ", "/", "(", ")", "&", ",", ":", "'", "\"", "?"]:
+        safe_title = safe_title.replace(ch, "-")
+    while "--" in safe_title:
+        safe_title = safe_title.replace("--", "-")
+    safe_title = safe_title.strip("-")
     filename = f"{date_str}-{safe_title}.md"
     filepath = os.path.join(category_dir, filename)
-    
     if os.path.exists(filepath):
         print(f"Already exists: {filepath}")
         return None, None
-    
-    header = f"# {title}\n\n_{date_str}_\n\n"
+    header = f"# {title}\n\n> _{date_str}_ | Category: **{category}**\n\n"
     full_content = header + content + "\n"
-    
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(full_content)
-    
     prefix = random.choice(COMMIT_PREFIXES)
     commit_msg = f"{prefix}{title}"
-    
     return filepath, commit_msg
 
 def main():
     topic = get_today_topic(TOPICS)
     filepath, commit_msg = create_til_entry(topic)
-    
     if filepath:
         print(f"Created: {filepath}")
         print(f"COMMIT_MSG={commit_msg}")
-        with open(os.environ.get("GITHUB_OUTPUT", "/dev/null"), "a") as f:
-            f.write(f"commit_msg={commit_msg}\n")
-            f.write(f"has_new=true\n")
+        gh_output = os.environ.get("GITHUB_OUTPUT", "")
+        if gh_output:
+            with open(gh_output, "a") as f:
+                f.write(f"commit_msg={commit_msg}\n")
+                f.write(f"has_new=true\n")
     else:
-        with open(os.environ.get("GITHUB_OUTPUT", "/dev/null"), "a") as f:
-            f.write(f"has_new=false\n")
+        gh_output = os.environ.get("GITHUB_OUTPUT", "")
+        if gh_output:
+            with open(gh_output, "a") as f:
+                f.write(f"has_new=false\n")
 
 if __name__ == "__main__":
     main()
