@@ -1,0 +1,34 @@
+name: Daily TIL
+
+on:
+  schedule:
+    - cron: "0 18 * * *"  # 11:30 PM IST (6:00 PM UTC)
+  workflow_dispatch:
+
+jobs:
+  generate-til:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate TIL Entry
+        id: generate
+        run: python scripts/generate_til.py
+
+      - name: Commit and Push
+        if: steps.generate.outputs.has_new == 'true'
+        run: |
+          git config user.name "dipakfirake"
+          git config user.email "dcfirake2@gmail.com"
+          git add -A
+          git commit -m "${{ steps.generate.outputs.commit_msg }}"
+          git push
