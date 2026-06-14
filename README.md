@@ -22,3 +22,8 @@ Inspired by [jbranchaud/til](https://github.com/jbranchaud/til).
 ---
 
 _This is my personal learning journal. I document small things I learn every day to reinforce my understanding and build a knowledge base over time._
+
+---
+
+<!-- til-stats -->
+> 📊 **1/115** topics completed | Last updated: 2026-06-14
